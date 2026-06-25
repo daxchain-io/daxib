@@ -1,0 +1,192 @@
+# .goreleaser.yml — Daxib.
+#
+# One config, two gates:
+#
+#   LOCAL (the validation gate — no publish, no real signing):
+#     goreleaser check
+#     goreleaser release --snapshot --clean --skip=sbom,sign
+#       --snapshot implies --skip=publish,validate,announce; we additionally skip
+#       sbom (syft is not installed locally) and sign (cosign keyless needs GitHub
+#       OIDC, unavailable off-CI). docker IS available locally, so the snapshot run
+#       still BUILDS the multi-arch OCI image via Dockerfile.release.
+#
+#   CI (the real release — only when the operator arms it):
+#     goreleaser release --clean
+#       runs from .github/workflows/release.yml inside the `release` environment.
+#       Signing is cosign KEYLESS via GitHub OIDC, so nothing here references a
+#       COSIGN_PRIVATE_KEY — by construction there is none to steal.
+#
+# Reproducible-build posture: CGO_ENABLED=0, -trimpath, -buildvcs=false,
+# commit-pinned mod_timestamp, {{ .CommitDate }} ldflag — no wall-clock input
+# enters the artifacts.
+version: 2
+
+project_name: daxib
+
+before:
+  hooks:
+    # Non-mutating integrity checks only — NEVER `go mod tidy` in the release path
+    # (a release must not silently rewrite go.mod/go.sum).
+    - go mod verify
+    - go mod download
+
+builds:
+  - id: daxib
+    main: ./cmd/daxib
+    binary: daxib
+    env:
+      - CGO_ENABLED=0 # container hygiene: fully static, pure-Go deps
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64 # full 6-target matrix incl. windows/arm64
+    flags:
+      - -trimpath
+      - -buildvcs=false # required for byte-identity (Go 1.18+ auto-stamps vcs.modified)
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/daxchain-io/daxib/internal/version.Version={{ .Version }}
+      - -X github.com/daxchain-io/daxib/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/daxchain-io/daxib/internal/version.Date={{ .CommitDate }} # commit date, NOT .Date (reproducibility)
+
+archives:
+  - id: daxib
+    ids:
+      - daxib
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+# cosign KEYLESS signing of checksums.txt via GitHub Actions OIDC. A short-lived
+# Fulcio cert binds the signature to THIS repo's release workflow at THIS tag ref;
+# the Sigstore bundle lands in the Rekor transparency log. No long-lived key
+# exists. Skipped locally with `--skip=sign` (no OIDC off-CI).
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum # keyless cosign over checksums.txt only
+
+# syft SBOM per archive. CI-only: syft is not installed locally, so the local gate
+# runs with `--skip=sbom`. The stanza stays so CI emits an SBOM for every archive.
+sboms:
+  - artifacts: archive
+
+# ONE multi-platform OCI entry on the dockers_v2 schema. goreleaser stages the
+# prebuilt per-platform binary at the build-context root and builds
+# Dockerfile.release once per --platform.
+dockers_v2:
+  - id: daxib
+    dockerfile: Dockerfile.release
+    images:
+      - ghcr.io/daxchain-io/images/daxib
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    # Populate the OCI provenance ARGs the Dockerfile bakes into image LABELs.
+    # {{ .Date }} here is the goreleaser run timestamp (image-creation time), the
+    # correct meaning for org.opencontainers.image.created (build provenance),
+    # distinct from the reproducible {{ .CommitDate }} stamped into the binary.
+    build_args:
+      VERSION: "{{ .Version }}"
+      COMMIT: "{{ .ShortCommit }}"
+      DATE: "{{ .Date }}"
+    tags:
+      - "{{ .Version }}"
+      # Floating tags move on STABLE releases only — a beta/rc ({{ .Prerelease }}
+      # non-empty) can never repoint :X.Y or :latest under a running deployment.
+      - "{{ if not .Prerelease }}{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+
+# cosign KEYLESS signing of the OCI image manifests by digest. artifacts: ""
+# targets dockers_v2 images.
+docker_signs:
+  - id: daxib-image
+    cmd: cosign
+    artifacts: "" # '' = dockers_v2 images
+    args:
+      - sign
+      - "--yes"
+      - "${artifact}"
+
+release:
+  disable: '{{ envOrDefault "DAXIB_RELEASE_DISABLE" "false" }}'
+  github:
+    owner: daxchain-io
+    name: daxib
+  # Any dash-suffixed tag (v1.0.0-rc.1, vX.Y.Z-beta.N) is marked a GitHub
+  # prerelease, so /releases/latest never returns it.
+  prerelease: auto
+  # mode: replace is for a release whose CORE artifacts never finished publishing
+  # (re-run the same tag to complete it). Once a release's artifacts are public +
+  # Rekor-logged, every fix is a new patch tag.
+  mode: replace
+
+# Homebrew distribution via homebrew_casks (NOT the deprecated brews: block).
+# Casks are macOS-only; go install / the GitHub release archives / the OCI image
+# cover Linux and Windows.
+homebrew_casks:
+  - name: daxib
+    ids:
+      - daxib
+    binaries:
+      - daxib
+    # skip_upload is a TEMPLATED string, NOT a static bool, so one config serves
+    # two jobs. It defaults to "true" (render-only): the goreleaser job computes
+    # the cask but does NOT push it; a dedicated stable-only publish job rewrites
+    # the SHA values from the immutable checksums.txt and pushes the corrected file.
+    skip_upload: '{{ envOrDefault "DAXIB_CASK_SKIP_UPLOAD" "true" }}'
+    repository:
+      owner: daxchain-io
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    # Explicit download URL so the cask pipe is SELF-CONTAINED — it does NOT depend
+    # on goreleaser's GitHub-release block being enabled. {{ .Tag }} is the
+    # v-prefixed tag; {{ .ArtifactName }} is the per-arch archive filename.
+    url:
+      template: "https://github.com/daxchain-io/daxib/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    homepage: https://github.com/daxchain-io/daxib
+    description: The Bitcoin wallet for AI — agent-first CLI + MCP server
+    hooks:
+      post:
+        # Strip the macOS quarantine xattr Gatekeeper applies to downloaded
+        # binaries; trust comes from the cosign/OIDC chain, the quarantine bit is a
+        # Finder annotation, not Apple notarization.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/daxib"]
+          end
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch

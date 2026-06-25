@@ -1,0 +1,111 @@
+# golangci-lint configuration for Daxib (golangci-lint v2 schema).
+#
+# This is the depguard "belt" to internal/arch_test.go's "suspenders": the
+# import-matrix law is encoded here as deny-lists AND asserted by a real test.
+#
+# AUTHORITY: internal/arch_test.go is the load-bearing gate and the strict
+# SUPERSET — it goes red the moment the dependency law breaks, even with every
+# linter uninstalled. This depguard config is a best-effort SUBSET that overlaps
+# it as closely as the linter's model allows. CGO is off everywhere (pure-Go
+# deps only).
+#
+# M1 ships only domain/version/service/cli/mcpserver, so the rules below name the
+# v1 provider set (docs/PLAN.md §2/§6/§8) up front — a future provider add lands
+# already-governed rather than silently un-denied.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - depguard      # the import-matrix deny-lists (the whole point)
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - misspell
+    - gosec
+  settings:
+    depguard:
+      rules:
+        # ── Frontends import service + domain (+ version) ONLY ──
+        # Files: internal/cli/**, internal/mcpserver/**. They may NOT reach any
+        # provider, and must NOT import the OTHER frontend. depguard `files` globs
+        # are matched against the absolute file path.
+        frontends:
+          files:
+            - "**/internal/cli/**"
+            - "**/internal/mcpserver/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/config
+              desc: "frontends import service+domain(+version) only — not config"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "frontends import service+domain only — not the keys provider"
+            - pkg: github.com/daxchain-io/daxib/internal/descriptor
+              desc: "frontends import service+domain only — not the descriptor provider"
+            - pkg: github.com/daxchain-io/daxib/internal/backend
+              desc: "frontends import service+domain only — not the backend provider"
+            - pkg: github.com/daxchain-io/daxib/internal/coinselect
+              desc: "frontends import service+domain only — not coinselect"
+            - pkg: github.com/daxchain-io/daxib/internal/psbt
+              desc: "frontends import service+domain only — not the psbt provider"
+            - pkg: github.com/daxchain-io/daxib/internal/fee
+              desc: "frontends import service+domain only — not fee"
+            - pkg: github.com/daxchain-io/daxib/internal/fsx
+              desc: "frontends import service+domain only — not fsx"
+            - pkg: github.com/daxchain-io/daxib/internal/secret
+              desc: "frontends import service+domain only — not secret"
+            - pkg: github.com/daxchain-io/daxib/internal/policy
+              desc: "frontends import service+domain only — not policy"
+            - pkg: github.com/daxchain-io/daxib/internal/policyseal
+              desc: "frontends import service+domain only — not policyseal"
+            - pkg: github.com/daxchain-io/daxib/internal/journal
+              desc: "frontends import service+domain only — not journal"
+            - pkg: github.com/daxchain-io/daxib/internal/registry
+              desc: "frontends import service+domain only — not registry"
+
+        # ── cli must NOT import mcpserver and vice versa ──
+        # The two frontends are independent adapters over the same core; a cross-
+        # frontend edge would couple them. (arch_test.go is authoritative — it also
+        # allows a frontend's OWN subpackage, e.g. cli → cli/render, which a flat
+        # deny-list here cannot express, so this pair is kept narrow.)
+        cli-not-mcpserver:
+          files:
+            - "**/internal/cli/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/mcpserver
+              desc: "cli must not import mcpserver — one core, two independent frontends"
+        mcpserver-not-cli:
+          files:
+            - "**/internal/mcpserver/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/cli
+              desc: "mcpserver must not import cli — one core, two independent frontends"
+
+        # ── The contract package imports nothing internal ──
+        contract:
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal
+              desc: "domain imports nothing internal (it is the wire contract)"
+
+  exclusions:
+    rules:
+      # Test fixtures may use patterns gosec flags (temp files, fixed creds, etc.).
+      - path: _test\.go
+        linters:
+          - gosec
+      # arch_test.go shells out to `go` and reads source dirs — those are the point
+      # of the test, not findings.
+      - path: internal/arch_test\.go
+        linters:
+          - gosec
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt

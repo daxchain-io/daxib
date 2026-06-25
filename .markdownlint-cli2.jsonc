@@ -1,0 +1,28 @@
+// markdownlint-cli2 config (run in CI by a static-checks workflow).
+// Rules reference: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+//
+// We enforce the full default rule set EXCEPT two cosmetic rules that fight
+// with long-form technical specs:
+//   MD013 (line-length)        — the design/spec docs use long prose lines and
+//                                wide tables on purpose; reflowing them hurts
+//                                readability and diffs.
+//   MD060 (table-column-style) — a new, opinionated pipe-spacing rule; our
+//                                GFM tables render fine and we don't enforce a
+//                                pipe-spacing house style.
+// And one rule scoped, not disabled:
+//   MD024 (no-duplicate-heading) → siblings_only — CHANGELOG.md (Keep a Changelog)
+//                                repeats "### Added"/"### Changed"/… under every
+//                                version; siblings_only still catches true
+//                                duplicates within one section.
+// Everything structural (heading increments, list consistency, fenced-code
+// languages, table column counts, trailing spaces, …) stays ON.
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD060": false,
+    "MD024": { "siblings_only": true }
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules", "dist", "vendor"]
+}

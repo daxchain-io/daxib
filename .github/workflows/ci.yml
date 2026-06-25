@@ -1,0 +1,216 @@
+# Pre-merge CI. All third-party actions are SHA-pinned (dependabot bumps them).
+# CGO is off everywhere (pure-Go deps).
+#
+# Jobs:
+#   changes           - decide whether the expensive Go matrix is needed
+#   lint              - gofmt diff, go vet, golangci-lint (incl. depguard matrix; arch_test.go is authoritative)
+#   test              - go test -race ./... on ubuntu (incl. arch_test.go)
+#   test-cross-os     - go test ./... on macos + windows + windows-arm64 (the *_unix/_windows code)
+#   cross-compile     - go build ./cmd/daxib for all six GOOS/GOARCH with CGO_ENABLED=0
+#   govulncheck       - govulncheck ./...
+#   goreleaser-snapshot - goreleaser build --snapshot --clean (the six-target gate)
+#
+# Bitcoin integration jobs (a regtest/bitcoind harness) and the per-milestone
+# acceptance demo jobs (docs/demos/mNN.sh) arrive in later milestones — see
+# docs/PLAN.md §8.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26"
+  CGO_ENABLED: "0"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: classify changes
+    runs-on: ubuntu-latest
+    outputs:
+      run_go_ci: ${{ steps.filter.outputs.run_go_ci }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: decide whether Go CI is required
+        id: filter
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+
+          zero=0000000000000000000000000000000000000000
+          base="${PUSH_BEFORE_SHA:-}"
+          if [ -n "${PR_BASE_SHA:-}" ]; then
+            base="$PR_BASE_SHA"
+          fi
+
+          if [ -z "$base" ] || [ "$base" = "$zero" ]; then
+            echo "run_go_ci=true" >> "$GITHUB_OUTPUT"
+            echo "No stable comparison base; running full Go CI."
+            exit 0
+          fi
+
+          if ! files="$(git diff --name-only "$base" "$GITHUB_SHA")"; then
+            echo "run_go_ci=true" >> "$GITHUB_OUTPUT"
+            echo "Could not diff against $base; running full Go CI."
+            exit 0
+          fi
+
+          if [ -z "$files" ]; then
+            echo "run_go_ci=false" >> "$GITHUB_OUTPUT"
+            echo "No changed files detected; skipping expensive Go CI jobs."
+            exit 0
+          fi
+
+          run_go_ci=false
+          while IFS= read -r file; do
+            case "$file" in
+              *.md|LICENSE|docs/deploy/*.yaml|docs/deploy/*.yml|.markdownlint-cli2.jsonc)
+                ;;
+              *)
+                run_go_ci=true
+                ;;
+            esac
+          done <<EOF
+          $files
+          EOF
+
+          echo "Changed files:"
+          printf '%s\n' "$files"
+          echo "run_go_ci=$run_go_ci" >> "$GITHUB_OUTPUT"
+
+  lint:
+    name: lint
+    needs: changes
+    if: needs.changes.outputs.run_go_ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: gofmt (fail on diff)
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt found unformatted files:"; echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        with:
+          version: v2.12.2
+      # NOTE: the import-matrix / one-core-two-frontends rule is enforced
+      # AUTHORITATIVELY by internal/arch_test.go (run in the test jobs) and, as a
+      # best-effort subset, by golangci-lint's depguard above.
+
+  test:
+    name: test (race, ubuntu)
+    needs: changes
+    if: needs.changes.outputs.run_go_ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: go test -race
+        # -race requires cgo; scope the override to this step only (the binaries we
+        # ship are still built CGO_ENABLED=0 in cross-compile / goreleaser).
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -coverprofile=coverage.txt ./...
+
+  test-cross-os:
+    name: test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.run_go_ci == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: go test
+        # Exercises the per-OS build-tagged code (keystore perms, path resolution,
+        # and file-locking differ exactly per OS) once those providers land.
+        run: go test ./...
+
+  cross-compile:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: changes
+    if: needs.changes.outputs.run_go_ci == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [darwin, linux, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: go build (CGO off)
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -buildvcs=false ./cmd/daxib
+
+  govulncheck:
+    name: govulncheck
+    needs: changes
+    if: needs.changes.outputs.run_go_ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: govulncheck
+        # Pinned (not @latest) for reproducible, supply-chain-safe CI: a compromised
+        # upstream release can't run here unbidden. Bump manually — a `go install`
+        # version in a run step is not tracked by dependabot.
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+  goreleaser-snapshot:
+    name: goreleaser build --snapshot
+    needs: changes
+    if: needs.changes.outputs.run_go_ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0 # goreleaser needs tags/history for version templating
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          version: "v2.16.0"
+          args: build --snapshot --clean

@@ -1,0 +1,9 @@
+title = "Daxib gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# Public, deterministic Bitcoin test fixtures (signet/regtest keys, well-known
+# BIP test vectors) get allow-listed here per file + regex as the demos and key
+# fixtures land in later milestones — the same shape as the daxie config, kept
+# empty until M1's skeleton grows them.
