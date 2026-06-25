@@ -1,0 +1,11 @@
+# Local Claude Code state (per-machine, not for publish)
+.claude/settings.local.json
+
+# OS
+.DS_Store
+
+# Go build output (this will be a Go project)
+/daxib
+/dist/
+*.out
+coverage.txt
