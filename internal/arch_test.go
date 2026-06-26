@@ -180,12 +180,15 @@ func checkEdge(t *testing.T, fromPath string, from layer, imp string) {
 		case layerCore, layerContract, layerVersion:
 			// allowed
 		case layerFrontend:
-			// The two frontends MUST NOT import each other. cli and mcpserver are
-			// independent adapters over the same core; a cross-frontend edge would
-			// couple them and is forbidden (docs/PLAN.md §1). A frontend importing
-			// its OWN subpackage (cli → cli/render) is fine.
-			if frontendOf(fromPath) != frontendOf(imp) {
-				t.Errorf("FRONTEND VIOLATION: %s imports the other frontend %s; cli and mcpserver must not import each other (one core, two independent frontends)", fromPath, imp)
+			// The two frontends are independent adapters over the same core, with ONE
+			// sanctioned cross-frontend edge: cli → mcpserver (the host calls
+			// cli.Execute; the cli `mcp serve|tools` command builds mcpserver.New(svc)
+			// — Frontend 1 hosting Frontend 2). The REVERSE (mcpserver → cli) stays
+			// forbidden: mcpserver never reaches back into the CLI. A frontend importing
+			// its OWN subpackage (cli → cli/render, mcpserver → mcpserver/tools) is fine
+			// (docs/PLAN.md §1, §6).
+			if frontendOf(fromPath) != frontendOf(imp) && (frontendOf(fromPath) != "cli" || frontendOf(imp) != "mcpserver") {
+				t.Errorf("FRONTEND VIOLATION: %s imports the other frontend %s; only the cli → mcpserver wiring edge is sanctioned (mcpserver must never import cli)", fromPath, imp)
 			}
 		case layerProvider:
 			t.Errorf("FRONTEND VIOLATION: %s imports provider %s; frontends import service+domain(+version) only", fromPath, imp)
@@ -252,8 +255,53 @@ func TestFrontendsDoNotImportEachOther(t *testing.T) {
 		}
 		self := frontendOf(p.ImportPath)
 		for _, imp := range append(append([]string{}, p.Imports...), p.TestImports...) {
-			if classify(imp) == layerFrontend && frontendOf(imp) != self {
-				t.Errorf("CROSS-FRONTEND IMPORT: %s imports %s; cli and mcpserver must stay independent adapters over the shared core", p.ImportPath, imp)
+			if classify(imp) != layerFrontend || frontendOf(imp) == self {
+				continue
+			}
+			// The ONE sanctioned cross-frontend edge: cli → mcpserver (the `mcp serve|
+			// tools` command builds mcpserver.New(svc)). The reverse stays forbidden.
+			if self == "cli" && frontendOf(imp) == "mcpserver" {
+				continue
+			}
+			t.Errorf("CROSS-FRONTEND IMPORT: %s imports %s; only cli → mcpserver is sanctioned (mcpserver must never import cli)", p.ImportPath, imp)
+		}
+	}
+}
+
+// TestMcpserverImportsNoProvider is the explicit, per-package guard that the MCP
+// server (Frontend 2) has the SAME import allowlist as the CLI: it may import ONLY
+// service + domain + version (+ its own subpackage internal/mcpserver/tools) of the
+// governed internal layers, plus stdlib/third-party (the MCP SDK + jsonschema-go,
+// which classify external). It must NOT import ANY provider — that is what makes it
+// physically unable to skip the policy.Reserve chokepoint or reach the keystore: a
+// provider import is the ONLY way to do business logic, and the lattice denies it.
+//
+// The package-level TestImportMatrix already enforces this as a FRONTEND VIOLATION;
+// this focused test makes the §6 "mcpserver imports service+domain(+version) only"
+// guarantee a named, load-bearing regression guard — add (say) an internal/policy
+// import to a mcpserver file and this goes red with a pointed message.
+func TestMcpserverImportsNoProvider(t *testing.T) {
+	for _, p := range goListAll(t) {
+		// Both the core package and its tools subpackage are Frontend 2.
+		if p.ImportPath != modulePrefix+"/internal/mcpserver" &&
+			!strings.HasPrefix(p.ImportPath, modulePrefix+"/internal/mcpserver/") {
+			continue
+		}
+		for _, imp := range append(append([]string{}, p.Imports...), p.TestImports...) {
+			switch classify(imp) {
+			case layerProvider:
+				t.Errorf("MCPSERVER VIOLATION: %s imports provider %s; Frontend 2 imports service+domain(+version) only — a provider import is the only way to skip the policy.Reserve chokepoint, and the lattice forbids it", p.ImportPath, imp)
+			case layerCore, layerContract, layerVersion, layerExternal:
+				// allowed: service (core), domain (contract), version, and the MCP SDK /
+				// jsonschema-go (external/third-party).
+			case layerFrontend:
+				// Only mcpserver's OWN packages (core ↔ tools subpackage); the
+				// cross-frontend rule (cli) is covered by TestFrontendsDoNotImportEachOther.
+				if frontendOf(imp) != "mcpserver" {
+					t.Errorf("MCPSERVER VIOLATION: %s imports the other frontend %s; the two frontends are independent", p.ImportPath, imp)
+				}
+			case layerHost:
+				t.Errorf("MCPSERVER VIOLATION: %s imports the host %s", p.ImportPath, imp)
 			}
 		}
 	}

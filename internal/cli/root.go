@@ -66,8 +66,8 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newTxCmd(ctx, rs),      // M4: tx send/status/wait/list (the send pipeline)
 		newFeeCmd(ctx, rs),     // M4: fee estimates + recommendation
 		newPolicyCmd(ctx, rs),  // M5: sealed spend-limit guardrails
-		// descriptor/psbt/receive/mcp land in later milestones
-		// (docs/PLAN.md §4, §8).
+		newMcpCmd(ctx, rs),     // M6: the MCP server (Frontend 2) + tool introspection
+		// descriptor/psbt/receive land in later milestones (docs/PLAN.md §4, §8).
 	)
 
 	return root

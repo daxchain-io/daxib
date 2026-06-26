@@ -67,23 +67,19 @@ linters:
             - pkg: github.com/daxchain-io/daxib/internal/registry
               desc: "frontends import service+domain only — not registry"
 
-        # ── cli must NOT import mcpserver and vice versa ──
-        # The two frontends are independent adapters over the same core; a cross-
-        # frontend edge would couple them. (arch_test.go is authoritative — it also
-        # allows a frontend's OWN subpackage, e.g. cli → cli/render, which a flat
-        # deny-list here cannot express, so this pair is kept narrow.)
-        cli-not-mcpserver:
-          files:
-            - "**/internal/cli/**"
-          deny:
-            - pkg: github.com/daxchain-io/daxib/internal/mcpserver
-              desc: "cli must not import mcpserver — one core, two independent frontends"
+        # ── mcpserver must NOT import cli (the reverse IS sanctioned) ──
+        # The two frontends are independent adapters over the same core, with ONE
+        # sanctioned cross-frontend edge: cli → mcpserver (Frontend 1's `mcp serve|
+        # tools` command builds mcpserver.New(svc), hosting Frontend 2). The reverse
+        # (mcpserver → cli) stays forbidden: the MCP server never reaches back into the
+        # CLI. (arch_test.go is authoritative — TestFrontendsDoNotImportEachOther and
+        # TestImportMatrix sanction exactly cli → mcpserver and deny mcpserver → cli.)
         mcpserver-not-cli:
           files:
             - "**/internal/mcpserver/**"
           deny:
             - pkg: github.com/daxchain-io/daxib/internal/cli
-              desc: "mcpserver must not import cli — one core, two independent frontends"
+              desc: "mcpserver must not import cli — the cli → mcpserver edge is one-way (Frontend 1 hosts Frontend 2)"
 
         # ── The contract package imports nothing internal ──
         contract:
@@ -166,6 +162,18 @@ linters:
 
   exclusions:
     rules:
+      # The M6 MCP policy-bound-send integration test (package mcpserver_test) is the
+      # SINGLE load-bearing seam that drives a REAL *service.Service through the MCP
+      # frontend end-to-end: it must import the backend fake (and the backend package
+      # for backend.Options) to stand up the service the way any client would, and seal
+      # a policy to prove the over-limit send returns the SAME exit-3 envelope the CLI
+      # gets. The AUTHORITATIVE import-matrix law (internal/arch_test.go, which inspects
+      # non-test imports only) governs the production split and TestMcpserverImportsNoProvider
+      # proves the production package imports NO provider; this external-test-package
+      # provider use is the sanctioned end-to-end seam, exempt from the depguard SUBSET belt.
+      - path: internal/mcpserver/policy_integration_test\.go
+        linters:
+          - depguard
       # The coinselect vsize/dust cross-check tests intentionally import
       # btcd/blockchain + btcd/mempool to PIN the inlined constants to btcd's own
       # weight/dust math (the whole point of the pin). Production code never does;

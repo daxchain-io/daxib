@@ -1,0 +1,1321 @@
+[
+  {
+    "name": "address_list",
+    "description": "List a wallet's materialized addresses on the active network: each address's ref (wallet/branch/index), branch (0 receive, 1 change), index, the bech32 address, and creation time. 'wallet' is optional. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "wallet"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "addresses": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "branch": {
+                "maximum": 4294967295,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "index": {
+                "maximum": 4294967295,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ref",
+              "branch",
+              "index",
+              "address",
+              "created_at"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "network": {
+          "type": "string"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "wallet",
+        "network",
+        "addresses"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "address_new",
+    "description": "Derive and record the NEXT receive address for a wallet (a fresh invoice address to hand a counterparty). Derivation is from the stored xpub — no passphrase, no signing. Set 'change':true for an internal change address instead (rarely needed). Returns the ref (wallet/branch/index), the bech32 address, and the full BIP-84 path. This is the agent's sanctioned way to get a new address; raw key derivation and wallet creation are NOT exposed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "change": {
+          "type": "boolean"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "wallet"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "branch": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "index": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "wallet",
+        "ref",
+        "branch",
+        "index",
+        "address",
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true
+    }
+  },
+  {
+    "name": "balance",
+    "description": "Read a wallet's confirmed + unconfirmed balance on the active network. Derives the wallet's gap-window address set from its stored xpub (no passphrase), queries the backend's UTXOs, and aggregates them. Returns satoshis (int64) plus an exact BTC decimal string, the UTXO count, and the chain tip. Set 'utxos':true to enumerate the individual coins. 'wallet' is optional (omit for the default wallet). Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "utxos": {
+          "type": "boolean"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "confirmed_btc": {
+          "type": "string"
+        },
+        "confirmed_sat": {
+          "type": "integer"
+        },
+        "network": {
+          "type": "string"
+        },
+        "tip_height": {
+          "type": "integer"
+        },
+        "total_btc": {
+          "type": "string"
+        },
+        "total_sat": {
+          "type": "integer"
+        },
+        "unconfirmed_btc": {
+          "type": "string"
+        },
+        "unconfirmed_sat": {
+          "type": "integer"
+        },
+        "utxo_count": {
+          "type": "integer"
+        },
+        "utxos": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "confirmations": {
+                "type": "integer"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_btc": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat",
+              "value_btc",
+              "confirmations"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "wallet",
+        "network",
+        "backend",
+        "confirmed_sat",
+        "unconfirmed_sat",
+        "total_sat",
+        "confirmed_btc",
+        "unconfirmed_btc",
+        "total_btc",
+        "utxo_count",
+        "tip_height"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "fee",
+    "description": "Read the backend's current fee-rate estimates (sat/vByte) at three speeds — slow/normal/fast — plus the per-target table and the 1 sat/vB relay floor. 'speed' marks which tier is the headline recommendation (default normal). Use this to choose a fee before a send. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "speed": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "by_target": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "fast": {
+          "type": "integer"
+        },
+        "floor_sat_vb": {
+          "type": "integer"
+        },
+        "network": {
+          "type": "string"
+        },
+        "normal": {
+          "type": "integer"
+        },
+        "selected": {
+          "type": "string"
+        },
+        "selected_rate": {
+          "type": "integer"
+        },
+        "slow": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "network",
+        "backend",
+        "slow",
+        "normal",
+        "fast",
+        "floor_sat_vb",
+        "selected",
+        "selected_rate"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "policy_check",
+    "description": "Dry-run evaluate a hypothetical send against the active policy WITHOUT reserving budget or signing anything: would this recipient + amount be allowed? Returns allowed:true, or allowed:false with the dotted denial code (policy.denied.*) and reason. 'to' and 'amount' are required; 'fee_rate'/'fee_sat' refine the estimate. Read-only (no reservation is written).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "description": "amount to check, a decimal BTC string or an integer-sat string",
+          "type": "string"
+        },
+        "fee_rate": {
+          "description": "assumed fee rate in sat/vByte (optional)",
+          "type": "integer"
+        },
+        "fee_sat": {
+          "description": "assumed absolute fee in sats (optional)",
+          "type": "integer"
+        },
+        "to": {
+          "description": "recipient Bitcoin address for the active network",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to",
+        "amount"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "code": {
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "retry_after": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "allowed"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "policy_show",
+    "description": "Read the active signing policy: whether guardrails are sealed, the default and per-network spend limits (max-tx, max-day, max-fee-rate), the destination allowlist and denylist, and the sealed self-address count. Use this to pre-flight whether a transfer is in-policy before you try it. READ-ONLY — there is NO tool to change the policy (mutations are admin-passphrase-gated and operator-only). Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "allowlist": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "added_at": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "address"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "default": {
+          "additionalProperties": false,
+          "properties": {
+            "allowlist_enabled": {
+              "type": "boolean"
+            },
+            "include_self": {
+              "type": "boolean"
+            },
+            "max_day_sat": {
+              "type": "string"
+            },
+            "max_fee_rate_sat_vb": {
+              "type": "string"
+            },
+            "max_tx_sat": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowlist_enabled",
+            "include_self"
+          ],
+          "type": "object"
+        },
+        "denylist": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "added_at": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "address"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "network": {
+          "type": "string"
+        },
+        "networks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "allowlist_enabled": {
+                "type": "boolean"
+              },
+              "include_self": {
+                "type": "boolean"
+              },
+              "max_day_sat": {
+                "type": "string"
+              },
+              "max_fee_rate_sat_vb": {
+                "type": "string"
+              },
+              "max_tx_sat": {
+                "type": "string"
+              },
+              "network": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "network",
+              "allowlist_enabled",
+              "include_self"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "seal": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor_found": {
+              "type": "boolean"
+            },
+            "nonce": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "present": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "verified": {
+              "type": "boolean"
+            },
+            "watermark": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "written_by": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "present",
+            "anchor_found",
+            "verified",
+            "nonce",
+            "watermark"
+          ],
+          "type": "object"
+        },
+        "self_addresses": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seal",
+        "present",
+        "network",
+        "default",
+        "self_addresses"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "send",
+    "description": "Sign and broadcast a Bitcoin transfer. Coin-selects from the wallet's confirmed UTXOs, then POLICY-CHECKS the spend (per-tx limit, rolling-24h limit, fee-rate cap, destination allowlist) BEFORE a single byte is signed — a denied or over-limit send produces no signature and moves no funds. 'to' is a Bitcoin address for the active network; 'amount' is a decimal BTC string or an integer-sat string (never a float you computed); 'fee_rate' (sat/vByte) overrides the 'speed' tier. Set 'dry_run':true to preview without broadcasting. Waits for confirmation by default over MCP. Returns the txid, fee, and lifecycle status.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "type": "string"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "fee_rate": {
+          "type": "string"
+        },
+        "speed": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "wait": {
+          "additionalProperties": false,
+          "properties": {
+            "confirmations": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "to",
+        "amount"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_btc": {
+          "type": "string"
+        },
+        "amount_sat": {
+          "type": "integer"
+        },
+        "block_height": {
+          "type": "integer"
+        },
+        "change_address": {
+          "type": "string"
+        },
+        "change_btc": {
+          "type": "string"
+        },
+        "change_sat": {
+          "type": "integer"
+        },
+        "confirmations": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "raw_tx_hex": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "to",
+        "amount_sat",
+        "amount_btc",
+        "fee_sat",
+        "fee_btc",
+        "fee_rate",
+        "vsize",
+        "status"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true
+    }
+  },
+  {
+    "name": "tx_list",
+    "description": "List this wallet's transactions from the local journal, newest first: journal id, txid, status, recipient, amount, fee, vsize, confirmations, and timestamp. Filter by 'wallet' and cap with 'limit' (0 = no limit). The journal is the durable history. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "network": {
+          "type": "string"
+        },
+        "txs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "amount_btc": {
+                "type": "string"
+              },
+              "amount_sat": {
+                "type": "integer"
+              },
+              "confirmations": {
+                "type": "integer"
+              },
+              "fee_sat": {
+                "type": "integer"
+              },
+              "journal_id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "ts": {
+                "type": "string"
+              },
+              "txid": {
+                "type": "string"
+              },
+              "vsize": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "journal_id",
+              "status",
+              "to",
+              "amount_sat",
+              "amount_btc",
+              "fee_sat",
+              "vsize",
+              "ts"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "txs"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "tx_status",
+    "description": "Look up a transaction's current status by txid: signed, broadcast, pending, confirmed, or failed. Folds the local journal record with a single live backend re-check (and promotes a journaled tx to confirmed when the chain confirms it); never broadcasts. A txid that is neither journaled nor on-chain is a clean ref.not_found error. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "txid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "txid"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_btc": {
+          "type": "string"
+        },
+        "amount_sat": {
+          "type": "integer"
+        },
+        "block_height": {
+          "type": "integer"
+        },
+        "change_address": {
+          "type": "string"
+        },
+        "change_btc": {
+          "type": "string"
+        },
+        "change_sat": {
+          "type": "integer"
+        },
+        "confirmations": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "raw_tx_hex": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "to",
+        "amount_sat",
+        "amount_btc",
+        "fee_sat",
+        "fee_btc",
+        "fee_rate",
+        "vsize",
+        "status"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "tx_wait",
+    "description": "Block until a transaction reaches its confirmation target, streaming progress. Rebroadcasts a still-signed journal record first (the lost-broadcast window), then polls. 'confirmations' overrides the default target (1); 'timeout' (Go duration, e.g. '30m') bounds the wait. At the deadline it returns status:'timeout' as a tool error (code tx.wait_timeout) PLUS the structured result with a resume command — re-call to resume. Read-only (it waits on an existing tx; it never signs).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmations": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "txid"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_btc": {
+          "type": "string"
+        },
+        "amount_sat": {
+          "type": "integer"
+        },
+        "block_height": {
+          "type": "integer"
+        },
+        "change_address": {
+          "type": "string"
+        },
+        "change_btc": {
+          "type": "string"
+        },
+        "change_sat": {
+          "type": "integer"
+        },
+        "confirmations": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "raw_tx_hex": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "to",
+        "amount_sat",
+        "amount_btc",
+        "fee_sat",
+        "fee_btc",
+        "fee_rate",
+        "vsize",
+        "status"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "utxo_list",
+    "description": "List a wallet's unspent transaction outputs (coins) on the active network: each coin's outpoint (txid:vout), address, value in sats + BTC, and confirmation depth, plus the total. Use this to inspect coin control before a send. 'wallet' is optional. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "tip_height": {
+          "type": "integer"
+        },
+        "total_btc": {
+          "type": "string"
+        },
+        "total_sat": {
+          "type": "integer"
+        },
+        "utxos": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "confirmations": {
+                "type": "integer"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_btc": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat",
+              "value_btc",
+              "confirmations"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "wallet",
+        "network",
+        "backend",
+        "tip_height",
+        "utxos",
+        "total_sat",
+        "total_btc"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "wallet_list",
+    "description": "List the HD wallets in the keystore: names, ids, network, address counts, creation dates, and which is the default. Returns NON-SECRET grouping metadata only — never a mnemonic, seed, or key. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "wallets": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "addresses": {
+                "type": "integer"
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "default": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "network": {
+                "type": "string"
+              },
+              "wallet_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "wallet_id",
+              "network",
+              "addresses",
+              "created_at"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "wallets"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "wallet_show",
+    "description": "Show one HD wallet by name: its id, network, BIP-84 derivation path prefix, account xpub, next receive/change index, and address count. NON-SECRET metadata only — never a mnemonic or seed. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_xpub": {
+          "type": "string"
+        },
+        "addresses": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "next_change": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "next_receive": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path_prefix": {
+          "type": "string"
+        },
+        "wallet_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "wallet_id",
+        "network",
+        "path_prefix",
+        "account_xpub",
+        "next_receive",
+        "next_change",
+        "addresses",
+        "default",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  }
+]
