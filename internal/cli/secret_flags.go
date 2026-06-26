@@ -50,3 +50,29 @@ func (f *bip39Flags) bind(cmd *cobra.Command) {
 	fl.BoolVar(&f.stdin, "bip39-passphrase-stdin", false, "read the optional BIP-39 passphrase (25th word) from stdin")
 	fl.StringVar(&f.file, "bip39-passphrase-file", "", "read the optional BIP-39 passphrase (25th word) from a file")
 }
+
+// adminFlags binds the ADMIN-passphrase channel for policy mutations. The admin
+// secret is INDEPENDENT of the keystore passphrase (distinct flags + env) and never
+// arrives as a flag VALUE — only via stdin/file (or DAXIB_ADMIN_PASSPHRASE[_FILE]).
+type adminFlags struct {
+	stdin bool
+	file  string
+}
+
+func (f *adminFlags) bind(cmd *cobra.Command) {
+	fl := cmd.Flags()
+	fl.BoolVar(&f.stdin, "admin-passphrase-stdin", false, "read the policy admin passphrase from stdin")
+	fl.StringVar(&f.file, "admin-passphrase-file", "", "read the policy admin passphrase from a file (perms checked)")
+}
+
+// adminNewFlags binds the NEW admin-passphrase channel for change-admin-passphrase.
+type adminNewFlags struct {
+	stdin bool
+	file  string
+}
+
+func (f *adminNewFlags) bind(cmd *cobra.Command) {
+	fl := cmd.Flags()
+	fl.BoolVar(&f.stdin, "new-admin-passphrase-stdin", false, "read the NEW policy admin passphrase from stdin")
+	fl.StringVar(&f.file, "new-admin-passphrase-file", "", "read the NEW policy admin passphrase from a file")
+}

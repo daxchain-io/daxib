@@ -65,7 +65,8 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newUTXOCmd(ctx, rs),    // M3: utxo list
 		newTxCmd(ctx, rs),      // M4: tx send/status/wait/list (the send pipeline)
 		newFeeCmd(ctx, rs),     // M4: fee estimates + recommendation
-		// descriptor/psbt/receive/policy/mcp land in later milestones
+		newPolicyCmd(ctx, rs),  // M5: sealed spend-limit guardrails
+		// descriptor/psbt/receive/mcp land in later milestones
 		// (docs/PLAN.md §4, §8).
 	)
 

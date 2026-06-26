@@ -79,9 +79,16 @@ func (s *Service) chainParams() *chaincfg.Params {
 //
 // confirmedOnly is implicit: only confirmed UTXOs are selected (the default
 // policy); the unconfirmed split mirrors balance.go's Confirmations>0.
+// reserveFn is the §2.7/§5.1 policy hook: it runs AFTER coin selection (recipient,
+// amount, fee, fee-rate, and the change address are all known) and BEFORE the
+// keystore signs a single byte. A non-nil error from it aborts the send before any
+// signature exists. It is nil for a dry-run (the dry-run path runs a check-only
+// Evaluate elsewhere, writing no reservation).
+type reserveFn func(ctx context.Context, art sendArtifact) error
+
 func (s *Service) buildAndSign(ctx context.Context, wallet string, client interface {
 	UTXOs(ctx context.Context, addrs []string) ([]domain.UTXO, error)
-}, req domain.SendRequest, feeRate int64, dryRun bool, consumed map[string]bool) (sendArtifact, error) {
+}, req domain.SendRequest, feeRate int64, dryRun bool, consumed map[string]bool, reserve reserveFn) (sendArtifact, error) {
 	params := s.chainParams()
 
 	// 1. Parse + validate the amount and the destination address.
@@ -237,6 +244,26 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 	tx.AddTxOut(wire.NewTxOut(amountSat, recipientScript))
 	if sel.HasChange {
 		tx.AddTxOut(wire.NewTxOut(sel.ChangeSat, changeScript))
+	}
+
+	// 6b. POLICY CHOKEPOINT (§2.7/§5.1): the tx is fully BUILT (recipient, amount,
+	// fee, fee-rate, change all known) but NOT yet signed. Reserve the spend HERE —
+	// policy is enforced before the bytes can be signed, so a denied/over-limit send
+	// never produces a signature, and the rolling-24h reservation is durable before
+	// any signature exists (a crash/SIGKILL after this point can only under-spend).
+	if reserve != nil {
+		preArt := sendArtifact{
+			feeSat:     sel.FeeSat,
+			feeRate:    feeRate,
+			vsize:      sel.VSizeVB,
+			recipient:  req.To,
+			recipSat:   amountSat,
+			changeSat:  sel.ChangeSat,
+			changeAddr: changeAddr,
+		}
+		if rerr := reserve(ctx, preArt); rerr != nil {
+			return sendArtifact{}, rerr
+		}
 	}
 
 	// 7. Sign every input through the keystore (acquires the passphrase via the

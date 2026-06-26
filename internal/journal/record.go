@@ -102,6 +102,11 @@ type Record struct {
 	Confirmations int64     `json:"confirmations"`   // 0 until polled
 	BlockHeight   int64     `json:"block_height"`    // 0 until confirmed
 	Error         *string   `json:"error,omitempty"` // the reject reason on a failed record
+	// ReservationID cross-links the policy spend reservation (M5) so service can
+	// reconcile orphaned reservations against this record at Open (a record that
+	// reached `broadcast` ⇒ commit the reservation; still `signed`/absent ⇒ release).
+	// Omitted (and zero on M4 records) when no policy is active.
+	ReservationID string `json:"reservation_id,omitempty"`
 }
 
 // recordVersion is the current schema version stamped into Record.V on append.

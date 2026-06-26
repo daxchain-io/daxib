@@ -202,9 +202,17 @@ var codeExit = map[string]ExitCode{
 	// spend limit, destination allowlist, protected-UTXO refusal, coin-control).
 	"policy.denied": ExitPolicyDenied,
 
-	// 4 — AUTH (the "wrong/MISSING/unusable keystore passphrase" class)
+	// 4 — AUTH (the "wrong/MISSING/unusable keystore OR admin passphrase" class)
 	"keystore.bad_passphrase":      ExitAuth,
 	"keystore.passphrase_required": ExitAuth, // missing passphrase, no TTY — distinct exit, never a prompt hang
+	// The admin passphrase did not derive the anchor's pinned verify key (a policy
+	// admin mutation), OR no admin-passphrase source was provided for a mutation.
+	// This is an AUTH-class failure (the admin secret is wrong/missing), distinct
+	// from a SEAL violation (the file/anchor pair is inconsistent), so an operator
+	// can tell "my passphrase is wrong" (exit 4) from "the sealed state is tampered"
+	// (exit 8). Independent of the keystore passphrase (§3.7).
+	"policy.admin_auth":                ExitAuth,
+	"policy.admin_passphrase_required": ExitAuth,
 	// A ${env:}/${file:} secret reference (e.g. a backend rpcpassword) could not be
 	// resolved at dial time — a missing/unusable credential, an auth-class failure.
 	"secret.unresolved": ExitAuth,
@@ -229,12 +237,15 @@ var codeExit = map[string]ExitCode{
 	// 7 — FEE_POLICY_DENIED (anti-fee-burn: the computed fee/fee-rate exceeds the cap)
 	"policy.fee_cap": ExitFeePolicyDenied,
 
-	// 8 — TIMEOUT_PENDING / SEAL
+	// 8 — TIMEOUT_PENDING / SEAL. The policy SEAL class (the sealed-state integrity
+	// failures): a bad/absent seal, a nonce rollback, a corrupt durable counter, or
+	// an unknown-field version skew — all of which HALT signing. policy.admin_auth
+	// is NOT here (it is AUTH/exit 4: a wrong passphrase, not a tampered file).
 	"tx.wait_timeout":       ExitTimeoutPending,
 	"receive.timeout":       ExitTimeoutPending,
 	"policy.seal_violation": ExitTimeoutPending,
 	"policy.rollback":       ExitTimeoutPending,
-	"policy.admin_auth":     ExitTimeoutPending,
+	"policy.version":        ExitTimeoutPending, // unknown body field / future schema — fail closed
 	"policy.state_error":    ExitTimeoutPending,
 
 	// 9 — TX_CONFLICT (double-spend / replacement family)

@@ -11,6 +11,7 @@ import (
 	"github.com/daxchain-io/daxib/internal/domain"
 	"github.com/daxchain-io/daxib/internal/fsx"
 	"github.com/daxchain-io/daxib/internal/journal"
+	"github.com/daxchain-io/daxib/internal/policy"
 )
 
 // sendLockTimeout bounds acquisition of the per-wallet+network send-lock. A
@@ -76,9 +77,11 @@ func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domai
 
 	// --dry-run: preview only — build+sign READ-ONLY (no lock, no journal, no
 	// broadcast, and crucially no watermark advance: the change address is PEEKED, so
-	// a no-op preview has no durable side effect).
+	// a no-op preview has no durable side effect). The policy verdict is included via
+	// a CHECK-only Evaluate that writes NO reservation: a dry-run that WOULD be denied
+	// exits 3 before the (preview) sign.
 	if req.DryRun {
-		art, err := s.buildAndSign(ctx, wallet, client, req, feeRate, true, nil)
+		art, err := s.buildAndSign(ctx, wallet, client, req, feeRate, true, nil, s.dryRunPolicyCheck(wallet))
 		if err != nil {
 			return domain.TxResult{}, err
 		}
@@ -107,17 +110,54 @@ func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domai
 	// just flipped to `broadcast`.
 	consumed := s.reservedOutpoints(ctx, wallet)
 
+	// Open the policy engine for the send chokepoint. With no anchor + no policy it is
+	// permissive (a no-op reservation), so M4 behavior is unchanged when no policy is
+	// set. A seal/rollback/version failure (a tampered/rolled-back policy) HALTS the
+	// send here (exit 8) — fail-closed.
+	eng, perr := s.openPolicyEngine(ctx)
+	if perr != nil {
+		return domain.TxResult{}, perr
+	}
+
+	// resv holds the spend reservation captured by the reserve callback (set after
+	// coin-selection, before the keystore sign). committed gates the deferred release.
+	var resv policy.Reservation
+	committed := false
+	reserve := func(rctx context.Context, preArt sendArtifact) error {
+		r, rerr := eng.Reserve(rctx, policy.Check{
+			Network:    string(s.net),
+			Recipient:  preArt.recipient,
+			AmountSat:  preArt.recipSat,
+			FeeSat:     preArt.feeSat,
+			FeeRate:    preArt.feeRate,
+			ChangeAddr: preArt.changeAddr,
+		})
+		if rerr != nil {
+			return rerr // policy.denied.* (exit 3) or seal/state failure — BEFORE signing
+		}
+		resv = r
+		return nil
+	}
+
 	// Build + sign the artifact UNDER THE LOCK: gather UTXOs, coin-select (excluding
-	// reserved outpoints), allocate the change address (DeriveNext), and sign.
-	art, err := s.buildAndSign(ctx, wallet, client, req, feeRate, false, consumed)
+	// reserved outpoints), allocate the change address (DeriveNext), RESERVE the spend
+	// (policy chokepoint, before the keystore sign), and sign.
+	art, err := s.buildAndSign(ctx, wallet, client, req, feeRate, false, consumed, reserve)
 	if err != nil {
+		// A pre-sign failure (incl. a policy denial): release the reservation if one
+		// was taken (no signature exists, so freeing the budget is correct).
+		_ = resv.Release(context.Background())
 		return domain.TxResult{}, err
 	}
 
 	// Journal the new tx as `signed` BEFORE broadcast (crash here ⇒ recovery
-	// rebroadcasts the same bytes).
+	// rebroadcasts the same bytes). The reservation id is cross-linked so orphan
+	// reconciliation can resolve a stranded reservation against this record.
 	rec := s.journalRecord(wallet, art, feeRate)
+	rec.ReservationID = resv.ID()
 	if err := s.journal.Append(ctx, rec); err != nil {
+		// Pre-broadcast failure (no bytes on the wire): release the reservation.
+		_ = resv.Release(context.Background())
 		return domain.TxResult{}, err
 	}
 	emit(sink, "signed", "journaled "+rec.ID+" (raw tx persisted)")
@@ -126,9 +166,14 @@ func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domai
 	defer func() {
 		// Exactly-one-of settle/abort: if settled stayed false on an early/panic
 		// return, mark the record failed — but ONLY when it is still `signed` (never
-		// terminalize a recorded broadcast).
+		// terminalize a recorded broadcast). The reservation is released only when the
+		// send did not commit (a recorded broadcast keeps the reservation committed —
+		// over-counting is the safe direction).
 		if !settled {
 			s.abortSigned(context.Background(), rec.ID)
+		}
+		if !committed {
+			_ = resv.Release(context.Background())
 		}
 	}()
 
@@ -150,6 +195,11 @@ func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domai
 		// accepted → flips to `broadcast`. An accepted-but-unrecorded broadcast must
 		// resolve to `signed`, NEVER `failed`.
 		settled = true
+		// The bytes are LIVE on-chain: commit the spend reservation (reserved →
+		// committed). committed gates the deferred release so an accepted broadcast
+		// never frees the budget (over-counting is the safe direction).
+		committed = true
+		_ = resv.Commit(context.Background(), t)
 		if err := s.journal.SetState(ctx, s.net, rec.ID, journal.StateMutation{Status: journal.StatusBroadcast, Txid: &t}); err != nil {
 			// The record remains `signed` with the live bytes; surface a recoverable
 			// result + error so the caller resumes via `tx wait` (idempotent
@@ -168,7 +218,11 @@ func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domai
 		// CRITICAL: mark settled BEFORE returning so the deferred abort cannot
 		// terminalize this recoverable `signed` record. The bytes stay journaled for
 		// an idempotent rebroadcast on the next send-lock acquisition or `tx wait`.
+		// The signed bytes MAY have reached the mempool, so the reservation must NOT
+		// be released (over-counting is the safe direction): keep it (committed gate),
+		// and let orphan reconciliation commit it once the journal shows `broadcast`.
 		settled = true
+		committed = true
 		res := s.signedResult(wallet, art, rec.ID)
 		return res, domain.WithData(
 			domain.Wrap(domain.CodeBackendUnreachable,
@@ -376,6 +430,11 @@ func (s *Service) reconcileAtOpen(ctx context.Context) {
 	// NOT dial here (Open must stay offline-safe), so there is nothing to do beyond
 	// confirming the journal is readable; swallow any read error.
 	_, _ = s.journal.Unresolved(ctx, s.net)
+
+	// Reconcile orphaned policy spend reservations against the journal (a crash
+	// between Reserve and Commit/Release): a reservation whose record reached
+	// `broadcast` ⇒ commit; still `signed`/absent ⇒ release. Best-effort, offline.
+	s.reconcilePolicyOrphans(ctx)
 }
 
 // reservedOutpoints returns the set of "txid:vout" outpoints consumed by in-flight

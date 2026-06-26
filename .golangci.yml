@@ -128,6 +128,42 @@ linters:
             - pkg: github.com/daxchain-io/daxib/internal/config
               desc: "journal imports domain + fsx only — not config"
 
+        # ── policyseal is a LEAF crypto util: stdlib + x/crypto (+ domain) ONLY ──
+        policyseal:
+          files:
+            - "**/internal/policyseal/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/service
+              desc: "policyseal is a crypto leaf — never the core"
+            - pkg: github.com/daxchain-io/daxib/internal/policy
+              desc: "policyseal is a crypto leaf — policy depends on it, not the reverse"
+            - pkg: github.com/daxchain-io/daxib/internal/config
+              desc: "policyseal is a crypto leaf — config reads the anchor, not the reverse"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "policyseal is a crypto leaf — no keys"
+
+        # ── policy is a state provider leaf: domain + policyseal + fsx + secret ──
+        # It never imports the core (service), a frontend, OR the journal (service
+        # drives orphan reconciliation across the policy/journal seam).
+        policy:
+          files:
+            - "**/internal/policy/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/service
+              desc: "policy is a provider leaf — never the core"
+            - pkg: github.com/daxchain-io/daxib/internal/cli
+              desc: "policy is a provider leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/mcpserver
+              desc: "policy is a provider leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/journal
+              desc: "policy must not import journal — service drives reconciliation across the seam"
+            - pkg: github.com/daxchain-io/daxib/internal/backend
+              desc: "policy is offline — no backend"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "policy must not import keys — service supplies the sealed self-address snapshot"
+            - pkg: github.com/daxchain-io/daxib/internal/config
+              desc: "policy must not import config — service reads the anchor and hands it in"
+
   exclusions:
     rules:
       # The coinselect vsize/dust cross-check tests intentionally import

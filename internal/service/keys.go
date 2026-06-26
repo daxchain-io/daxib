@@ -11,6 +11,15 @@ const (
 	envPassphraseFile     = "DAXIB_PASSPHRASE_FILE"
 	envPassphraseConfirm  = "DAXIB_PASSPHRASE_CONFIRM"
 	envPassphraseConfFile = "DAXIB_PASSPHRASE_CONFIRM_FILE"
+	// The ADMIN passphrase channels are INDEPENDENT of the keystore passphrase
+	// (§3.7): distinct flag/env names and a distinct KDF (the anchor salt + admin
+	// scrypt params), so a compromised agent holding the keystore passphrase gains
+	// nothing toward forging a policy seal. The admin secret never arrives as a flag
+	// value and is never set in an agent pod.
+	envAdminPassphrase     = "DAXIB_ADMIN_PASSPHRASE"          //nolint:gosec // G101: env var NAME, not a credential
+	envAdminPassphraseFile = "DAXIB_ADMIN_PASSPHRASE_FILE"     //nolint:gosec // G101: env var NAME, not a credential
+	envAdminNewPassphrase  = "DAXIB_ADMIN_NEW_PASSPHRASE"      //nolint:gosec // G101: env var NAME, not a credential
+	envAdminNewPassFile    = "DAXIB_ADMIN_NEW_PASSPHRASE_FILE" //nolint:gosec // G101: env var NAME, not a credential
 )
 
 // secretSpec describes one secret source set (the flag pair + stdin-taken state).
@@ -77,6 +86,34 @@ func confirmSpec(stdin bool, file string, stdinTaken bool) secretSpec {
 		EnvFileVar:   envPassphraseConfFile,
 		PromptLabel:  "Confirm keystore passphrase: ",
 		RequiredCode: "keystore.passphrase_required",
+		StdinTaken:   stdinTaken,
+	}
+}
+
+// adminSpec builds the ADMIN-passphrase spec (the policy mutation secret). A
+// missing admin passphrase is the policy auth class
+// (policy.admin_passphrase_required, exit 4), distinct from the keystore class.
+func adminSpec(stdin bool, file string, stdinTaken bool) secretSpec {
+	return secretSpec{
+		StdinFlag:    stdin,
+		FilePath:     file,
+		EnvVar:       envAdminPassphrase,
+		EnvFileVar:   envAdminPassphraseFile,
+		PromptLabel:  "Admin passphrase: ",
+		RequiredCode: "policy.admin_passphrase_required",
+		StdinTaken:   stdinTaken,
+	}
+}
+
+// adminNewSpec builds the NEW admin-passphrase spec for change-admin-passphrase.
+func adminNewSpec(stdin bool, file string, stdinTaken bool) secretSpec {
+	return secretSpec{
+		StdinFlag:    stdin,
+		FilePath:     file,
+		EnvVar:       envAdminNewPassphrase,
+		EnvFileVar:   envAdminNewPassFile,
+		PromptLabel:  "New admin passphrase: ",
+		RequiredCode: "policy.admin_passphrase_required",
 		StdinTaken:   stdinTaken,
 	}
 }
