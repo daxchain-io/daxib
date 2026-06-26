@@ -315,18 +315,23 @@ func (e *Engine) sealAndWriteWith(sk ed25519.PrivateKey, body Policy) error {
 
 // ── body mutation helpers ────────────────────────────────────────────────────
 
-// defaultPolicy is a fresh body shell (allowlist on, include_self on — the safe
-// default). Limits are absent (the default block resolves nil = no limit) so a
-// fresh policy denies nothing by amount until `policy set` adds caps; the allowlist
-// gate is on, so destinations must be allowlisted/self.
+// defaultPolicy is a fresh body shell with the allowlist OFF by default —
+// petty-cash simplicity ("a cool project, not a bank"): limits + the denylist are
+// ALWAYS enforced, but sends are allowed to ANY address within the configured
+// limits unless the operator opts into deny-by-default destinations via
+// `policy set --allowlist on`. Limits are absent (the default block resolves nil =
+// no limit) so a fresh policy denies nothing by amount until `policy set` adds caps.
+// include_self stays on so a self/change destination always passes once the
+// allowlist IS turned on.
 func defaultPolicy(writtenBy string) Policy {
 	on := true
+	off := false
 	return Policy{
 		Version:   bodyVersion,
 		WrittenBy: writtenBy,
 		Rules: Rules{
 			Default: Limits{
-				AllowlistOn: &on,
+				AllowlistOn: &off,
 				IncludeSelf: &on,
 			},
 		},

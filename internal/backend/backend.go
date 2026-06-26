@@ -23,6 +23,7 @@ package backend
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/daxchain-io/daxib/internal/domain"
@@ -117,9 +118,78 @@ func (o Options) timeout() time.Duration {
 // displayURL returns the masked, log-safe endpoint URL. It prefers the
 // service-supplied DisplayURL (the masked RAW ref); when empty it derives a
 // masked form from the RESOLVED URL so a leaked credential is never surfaced.
+//
+// Defense-in-depth (SECLEAK-1): even a non-empty DisplayURL is collapsed with
+// maskResolvedURL when it STILL carries a literal credential-bearing tail (any
+// non-${…} path/query/userinfo) — so a stale/heuristic caller can never make the
+// error path leak a key. A DisplayURL that is already scheme://host, or whose tail
+// is a pure ${env:}/${file:} reference, is shown verbatim.
 func (o Options) displayURL() string {
-	if o.DisplayURL != "" {
-		return o.DisplayURL
+	if o.DisplayURL == "" {
+		return maskResolvedURL(o.URL)
 	}
-	return maskResolvedURL(o.URL)
+	if displayURLHasLiteralTail(o.DisplayURL) {
+		return maskResolvedURL(o.DisplayURL)
+	}
+	return o.DisplayURL
+}
+
+// displayURLHasLiteralTail reports whether a display URL still carries literal
+// (non-${…}, non-***) credential-bearing content past scheme://host. A masked "***"
+// segment is treated as already-safe (it is the friendly masker's redaction, not a
+// secret). It is intentionally conservative: anything it is unsure about, it deems a
+// literal tail so the caller collapses to scheme://host.
+func displayURLHasLiteralTail(s string) bool {
+	if !strings.Contains(s, "://") {
+		return false // host:port Core endpoint — no path/query secret
+	}
+	schemeEnd := strings.Index(s, "://") + 3
+	rel := s[schemeEnd:]
+	hostRel := strings.IndexAny(rel, "/?#")
+	hostPart := rel
+	tail := ""
+	if hostRel >= 0 {
+		hostPart = rel[:hostRel]
+		tail = rel[hostRel:]
+	}
+	if at := strings.LastIndexByte(hostPart, '@'); at >= 0 {
+		if segmentIsLiteralCredential(hostPart[:at]) {
+			return true
+		}
+	}
+	for _, seg := range strings.FieldsFunc(tail, func(r rune) bool {
+		return r == '/' || r == '?' || r == '&' || r == '=' || r == '#'
+	}) {
+		if segmentIsLiteralCredential(seg) {
+			return true
+		}
+	}
+	return false
+}
+
+// segmentIsLiteralCredential reports whether a display-URL segment is literal
+// credential-bearing content: non-empty, not a ${…} reference, and not the friendly
+// masker's "***" redaction.
+func segmentIsLiteralCredential(seg string) bool {
+	if seg == "" || seg == "***" {
+		return false
+	}
+	if strings.Contains(seg, "${") {
+		// A reference (possibly mixed); strip refs and see if literal remains.
+		rest := seg
+		for {
+			open := strings.Index(rest, "${")
+			if open < 0 {
+				break
+			}
+			cl := strings.IndexByte(rest[open:], '}')
+			if cl < 0 {
+				break
+			}
+			rest = rest[:open] + rest[open+cl+1:]
+		}
+		rest = strings.ReplaceAll(rest, "***", "")
+		return strings.TrimSpace(rest) != ""
+	}
+	return true
 }

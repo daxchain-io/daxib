@@ -104,6 +104,30 @@ type SendRequest struct {
 	Wait    WaitOpts `json:"wait,omitempty"`
 }
 
+// SpeedupRequest is the wire input for `tx speedup <txid>` (RBF/BIP-125): build a
+// replacement of an unconfirmed, RBF-signaling, wallet-originated send spending the
+// SAME inputs with a HIGHER fee, paying the SAME recipient. FeeRate is the raw
+// `--fee-rate` string ("" → a sensible bump above the original / the backend fast
+// estimate). Yes is the frontend confirmation flag (never serialized).
+type SpeedupRequest struct {
+	Wallet  string   `json:"wallet,omitempty"`
+	Txid    string   `json:"txid"`
+	FeeRate string   `json:"fee_rate,omitempty"`
+	Wait    WaitOpts `json:"wait,omitempty"`
+	Yes     bool     `json:"-"`
+}
+
+// CancelRequest is the wire input for `tx cancel <txid>` (RBF/BIP-125): build a
+// replacement that redirects ALL funds to a fresh wallet-owned change address
+// (voiding the original payment) with a higher fee. Same shape as SpeedupRequest.
+type CancelRequest struct {
+	Wallet  string   `json:"wallet,omitempty"`
+	Txid    string   `json:"txid"`
+	FeeRate string   `json:"fee_rate,omitempty"`
+	Wait    WaitOpts `json:"wait,omitempty"`
+	Yes     bool     `json:"-"`
+}
+
 // TxInputRef is one selected input in a TxResult (outpoint + the address it pays
 // from + its value).
 type TxInputRef struct {
@@ -147,6 +171,10 @@ type TxResult struct {
 	RawTxHex      string        `json:"raw_tx_hex,omitempty"`
 	Resume        string        `json:"resume,omitempty"`
 	DryRun        bool          `json:"dry_run,omitempty"`
+	// Replacement is true when this result is an RBF replacement (`tx speedup`/`tx
+	// cancel`); ReplacesTxid is the original tx's txid the replacement supersedes.
+	Replacement  bool   `json:"replacement,omitempty"`
+	ReplacesTxid string `json:"replaces_txid,omitempty"`
 }
 
 // TxStatusRequest is the wire input for `tx status <txid>`.

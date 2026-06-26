@@ -322,11 +322,10 @@ func newPolicyResetCmd(ctx context.Context, rs *rootState) *cobra.Command {
 }
 
 func newPolicyPinCmd(ctx context.Context, rs *rootState) *cobra.Command {
-	var print bool
 	var verify string
 	cmd := &cobra.Command{
 		Use:   "pin",
-		Short: "Print the pinned anchor (--print) or canary-verify under a key (--verify)",
+		Short: "Print the pinned anchor (default) or canary-verify under a key (--verify)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			svc, closeFn, err := openService(ctx, rs)
@@ -348,14 +347,12 @@ func newPolicyPinCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				_ = print
 				return render.Result(cmd.OutOrStdout(), m, view, func(w io.Writer) {
 					_, _ = io.WriteString(w, raw+"\n")
 				})
 			}
 		},
 	}
-	cmd.Flags().BoolVar(&print, "print", false, "print the pinned anchor JSON (the default action)")
 	cmd.Flags().StringVar(&verify, "verify", "", "canary: does policy.json verify under this ed25519:<key>? (exit 0/8)")
 	return cmd
 }
@@ -403,11 +400,12 @@ func renderPolicyShow(w io.Writer, m render.Mode, res service.PolicyShowResult) 
 	render.Line(w, m, "policy: nonce %d, watermark %d, written-by %s",
 		res.SealStatus.Nonce, res.SealStatus.Watermark, res.SealStatus.WrittenBy)
 	d := res.Default
-	render.Line(w, m, "default: max-tx=%s max-day=%s max-fee-rate=%s allowlist=%v include-self=%v",
-		dash(d.MaxTxSat), dash(d.MaxDaySat), dash(d.MaxFeeRate), d.AllowlistOn, d.IncludeSelf)
+	render.Line(w, m, "default: max-tx=%s max-day=%s max-fee-rate=%s include-self=%v",
+		dash(d.MaxTxSat), dash(d.MaxDaySat), dash(d.MaxFeeRate), d.IncludeSelf)
+	render.Line(w, m, "allowlist: %s", allowlistLine(d.AllowlistOn))
 	for _, n := range res.Networks {
-		render.Line(w, m, "  [%s] max-tx=%s max-day=%s max-fee-rate=%s allowlist=%v include-self=%v",
-			n.Network, dash(n.MaxTxSat), dash(n.MaxDaySat), dash(n.MaxFeeRate), n.AllowlistOn, n.IncludeSelf)
+		render.Line(w, m, "  [%s] max-tx=%s max-day=%s max-fee-rate=%s allowlist=%s include-self=%v",
+			n.Network, dash(n.MaxTxSat), dash(n.MaxDaySat), dash(n.MaxFeeRate), allowlistLine(n.AllowlistOn), n.IncludeSelf)
 	}
 	if len(res.Allowlist) > 0 {
 		render.Line(w, m, "allowlist:")
@@ -441,6 +439,16 @@ func dash(s string) string {
 		return "∞"
 	}
 	return s
+}
+
+// allowlistLine renders the allowlist gate state for `policy show`. When OFF it
+// states the petty-cash default loudly so the operator is never surprised that
+// sends to arbitrary addresses are permitted (limits + denylist still apply).
+func allowlistLine(on bool) string {
+	if on {
+		return "on (sends allowed only to allowlisted/self addresses within limits)"
+	}
+	return "off (sends allowed to any address within limits)"
 }
 
 // triBool parses an on|off tri-state flag: "" → nil (unchanged); on/true → &true;

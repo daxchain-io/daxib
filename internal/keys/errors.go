@@ -10,15 +10,12 @@ const (
 	CodeKeystoreConfirmRequired     = "keystore.confirm_required"     // exit 2
 	CodeKeystoreReadOnly            = "keystore.read_only"            // exit 10
 	CodeKeystoreNotFound            = "keystore.not_found"            // exit 10
-	CodeKeystorePermsInsecure       = "keystore.perms_insecure"       // exit 12
 	CodeKeystoreDerivationWatermark = "keystore.derivation_watermark" // exit 12
 	CodeWalletNotFound              = "wallet.not_found"              // exit 10
 	CodeWalletExists                = "wallet.exists"                 // exit 2
 	CodeMnemonicInvalid             = "mnemonic.invalid"              // exit 2
 	CodeUsageWords                  = "usage.words"                   // exit 2
 	CodeUsageInvalidName            = "usage.invalid_name"            // exit 2
-	CodeUsageBadIndex               = "usage.bad_index"               // exit 2
-	CodeNetworkMismatch             = "usage.network_mismatch"        // exit 2 (under usage prefix)
 	CodeStateLockTimeout            = "state.lock_timeout"            // exit 11
 	CodeStateCorrupt                = "state.corrupt"                 // exit 11
 )

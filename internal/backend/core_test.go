@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -150,6 +151,31 @@ func TestCore_RPCError(t *testing.T) {
 	var de *domain.Error
 	if !errors.As(err, &de) || de.Code != domain.CodeBackendRPCError {
 		t.Fatalf("err = %v, want backend.rpc_error", err)
+	}
+}
+
+// TestCore_RPCError_DoesNotLeakKey proves an embedded API key in the Core endpoint
+// URL never reaches the rpc_error message OR its data.endpoint (KNOWN-1/TC-3): the
+// rpc_error path scrubs the resolved URL down to scheme://host just like the dial
+// path, with no service-supplied DisplayURL.
+func TestCore_RPCError_DoesNotLeakKey(t *testing.T) {
+	node := newCoreRPC(t, map[string]any{})
+	node.rpcErr["getblockcount"] = "node is warming up"
+	const key = "abcdef0123456789abcdef0123456789deadbeef"
+	o := Options{Type: domain.BackendCore, URL: node.URL + "/v2/" + key, Network: domain.NetworkMainnet}
+	c := newCoreClient(o, node.Client())
+	_, err := c.TipHeight(context.Background())
+	if err == nil {
+		t.Fatal("expected an rpc_error")
+	}
+	if strings.Contains(err.Error(), key) {
+		t.Fatalf("rpc_error leaked the key: %v", err)
+	}
+	var de *domain.Error
+	if errors.As(err, &de) {
+		if ep, _ := de.Data["endpoint"].(string); strings.Contains(ep, key) {
+			t.Fatalf("data.endpoint leaked the key: %q", ep)
+		}
 	}
 }
 

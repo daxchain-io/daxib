@@ -33,8 +33,12 @@ var promptFunc = func(label string) ([]byte, error) {
 
 // IsTerminal reports whether the given reader is an interactive terminal. Only
 // *os.File can be a terminal; anything else (a pipe, a bytes.Buffer in tests) is
-// not. The cli frontend passes os.Stdin; this is the production isTTY for
-// Acquire.
+// not.
+//
+// It is a daxie-parity surface (DLC-1): the cli frontend wires its own isTTY via
+// term.IsTerminal(os.Stdin.Fd()) directly (cli/open.go), so this helper has no
+// current caller in daxib. It is retained verbatim to mirror daxie's secret package
+// (where it is likewise an unused convenience) rather than diverge the port.
 func IsTerminal(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {

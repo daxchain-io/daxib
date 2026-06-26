@@ -1,6 +1,9 @@
 package service
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/btcsuite/btcd/btcutil"
 
 	"github.com/daxchain-io/daxib/internal/domain"
@@ -89,6 +92,50 @@ func (in PolicySetInput) toChange(self []string, writtenBy string) policy.Change
 		c.Default = &lim
 	}
 	return c
+}
+
+// normalizeLimits validates + canonicalizes the limit flags to BARE sat integers
+// BEFORE they reach the sealed body. The flags are documented "in sats", so each is
+// a non-negative whole number of sats (an optional "sat"/"sats" suffix is tolerated
+// and stripped). This closes a fail-OPEN hole: an unvalidated unit-suffixed or
+// malformed limit (e.g. "100000sat", "garbage") was previously stored verbatim and
+// then parsed to "no limit" at eval, silently disabling the guardrail. "" leaves a
+// field unchanged; "none"/"null" lifts it. A non-integer/negative value is a usage
+// error (exit 2) — never silently stored.
+func (in PolicySetInput) normalizeLimits() (PolicySetInput, error) {
+	out := in
+	var err error
+	if out.MaxTxSat, err = normSatLimit("--max-tx", in.MaxTxSat); err != nil {
+		return in, err
+	}
+	if out.MaxDaySat, err = normSatLimit("--max-day", in.MaxDaySat); err != nil {
+		return in, err
+	}
+	if out.MaxFeeRate, err = normSatLimit("--max-fee-rate", in.MaxFeeRate); err != nil {
+		return in, err
+	}
+	return out, nil
+}
+
+// normSatLimit canonicalizes one "in sats" limit flag: "", "none", "null" pass
+// through; otherwise it must be a non-negative whole number of sats (an optional
+// "sat"/"sats" suffix is tolerated), returned as a bare decimal string. A BTC-style
+// or otherwise non-integer value is a usage error rather than silently-stored garbage.
+func normSatLimit(flag, s string) (string, error) {
+	switch s {
+	case "", "none", "null":
+		return s, nil
+	}
+	t := strings.TrimSpace(s)
+	t = strings.TrimSuffix(t, "sats")
+	t = strings.TrimSuffix(t, "sat")
+	t = strings.TrimSpace(t)
+	v, err := strconv.ParseInt(t, 10, 64)
+	if err != nil || v < 0 {
+		return "", domain.Newf(domain.CodeUsage+".limit",
+			"invalid %s %q: want a non-negative whole number of sats (e.g. 100000 or 100000sat), or 'none' to lift", flag, s)
+	}
+	return strconv.FormatInt(v, 10), nil
 }
 
 // triLimit maps a CLI limit string to a tri-state pointer: "" → nil (unchanged);

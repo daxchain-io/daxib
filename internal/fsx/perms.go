@@ -1,7 +1,6 @@
 package fsx
 
 import (
-	"io"
 	"os"
 )
 
@@ -9,11 +8,6 @@ import (
 // POSIX modes (some CSI / network mounts). It is NEVER the documented answer for
 // the fsGroup case (§7.9).
 const skipPermCheckEnv = "DAXIB_SKIP_PERM_CHECK"
-
-// permWarnSink receives the non-fatal group-read-by-foreign-group warning. It is
-// a package variable so the cli frontend can route it to stderr and tests can
-// capture it. Defaults to os.Stderr.
-var permWarnSink io.Writer = os.Stderr
 
 // lookupEnvFn is os.LookupEnv, swappable in tests so DAXIB_SKIP_PERM_CHECK can be
 // exercised without mutating the real process environment.

@@ -57,11 +57,16 @@ func preflightMnemonicDisplay(yes, jsonMode bool) error {
 //     clear it, then require re-entry of two random word positions; on success the
 //     mnemonic is redacted from the result (echoInResult=false).
 //
-// `out` is the human writer (stderr) for the interactive prompts; the function
-// returns how the result should treat the mnemonic.
-func mnemonicCeremony(out io.Writer, yes, jsonMode bool, mnemonic, bip39 string) (mnemonicDisplay, error) {
+// `out` is the human writer (stderr) for the interactive prompts; `in` is the
+// injected input stream (cmd.InOrStdin() in production), read instead of os.Stdin
+// directly so the ceremony is testable (KNOWN-3). The function returns how the
+// result should treat the mnemonic. A nil `in` falls back to os.Stdin.
+func mnemonicCeremony(out io.Writer, in io.Reader, yes, jsonMode bool, mnemonic, bip39 string) (mnemonicDisplay, error) {
 	if yes || jsonMode {
 		return mnemonicDisplay{echoInResult: true}, nil
+	}
+	if in == nil {
+		in = os.Stdin
 	}
 
 	words := strings.Fields(mnemonic)
@@ -75,7 +80,7 @@ func mnemonicCeremony(out io.Writer, yes, jsonMode bool, mnemonic, bip39 string)
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprint(out, "Press Enter once you have written it down...")
 
-	reader := bufio.NewReader(os.Stdin)
+	reader := bufio.NewReader(in)
 	_, _ = reader.ReadString('\n')
 
 	// Clear the screen so the mnemonic is not left on a shared terminal.

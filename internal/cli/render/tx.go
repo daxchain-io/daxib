@@ -27,6 +27,11 @@ func TxResult(w io.Writer, m Mode, r domain.TxResult) {
 		Line(w, m, "change:   %s BTC -> %s", r.ChangeBTC, r.ChangeAddress)
 	}
 	Line(w, m, "status:   %s", string(r.Status))
+	if r.Replacement && r.ReplacesTxid != "" {
+		// Mirror the JSON `replacement`/`replaces_txid` fields on the human path so an
+		// operator reading the terminal sees the RBF linkage (REG-4).
+		Line(w, m, "replaces: %s (RBF replacement)", r.ReplacesTxid)
+	}
 	if r.Confirmations > 0 {
 		Line(w, m, "confirmations: %s", itoa64(r.Confirmations))
 	}

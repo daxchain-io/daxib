@@ -1,6 +1,9 @@
 package backend
 
-import "strings"
+import (
+	"net/url"
+	"strings"
+)
 
 // mask.go is backend's fail-safe URL masker. The service composition root
 // supplies Options.DisplayURL (the masked RAW config ref) for every command dial,
@@ -12,70 +15,32 @@ import "strings"
 // ${…} references remain by the time backend sees one) and is intentionally
 // self-contained — backend must not import the config store.
 
-// maskResolvedURL reduces a long, opaque, high-entropy path/query segment of a
-// RESOLVED URL (a likely embedded credential) to "***", leaving the scheme, host,
-// and human-readable path words intact. A string with no "://" is returned
-// unchanged.
+// maskResolvedURL reduces a RESOLVED URL to its credential-free locator —
+// scheme://host[:port] only — for use in a user/log-facing error message. The
+// path, query, fragment, and ANY userinfo (user:pass@) are dropped, because any
+// of them may carry an embedded API key/password (KNOWN-1). This is deliberately
+// conservative: an Alchemy-style ...//host/v2/<KEY>, a lowercase opaque token, or
+// a user:pass@host credential all collapse to scheme://host, so no entropy
+// heuristic can be evaded. A string with no "://" is returned unchanged (it is not
+// a URL — e.g. a host:port Core endpoint already carries no secret path).
 func maskResolvedURL(s string) string {
 	if !strings.Contains(s, "://") {
 		return s
 	}
+	if u, err := url.Parse(s); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	// Fall back to a manual scheme://host cut when net/url cannot parse it (an
+	// embedded credential with odd bytes). Never return more than scheme://host.
 	schemeEnd := strings.Index(s, "://") + 3
-	hostRel := strings.IndexAny(s[schemeEnd:], "/?#")
-	if hostRel < 0 {
-		return s // scheme+host only, no path/query to mask
+	rel := s[schemeEnd:]
+	host := rel
+	if i := strings.IndexAny(rel, "/?#"); i >= 0 {
+		host = rel[:i]
 	}
-	hostEnd := schemeEnd + hostRel
-	head := s[:hostEnd]
-	tail := s[hostEnd:]
-
-	var out strings.Builder
-	var seg strings.Builder
-	flush := func() {
-		token := seg.String()
-		if looksLikeOpaqueSecret(token) {
-			out.WriteString("***")
-		} else {
-			out.WriteString(token)
-		}
-		seg.Reset()
+	// Drop any userinfo (user:pass@host -> host).
+	if at := strings.LastIndexByte(host, '@'); at >= 0 {
+		host = host[at+1:]
 	}
-	for i := 0; i < len(tail); i++ {
-		c := tail[i]
-		if c == '/' || c == '?' || c == '&' || c == '=' || c == '#' {
-			flush()
-			out.WriteByte(c)
-			continue
-		}
-		seg.WriteByte(c)
-	}
-	flush()
-	return head + out.String()
-}
-
-// looksLikeOpaqueSecret reports whether a single URL segment is a long,
-// high-entropy token (a likely credential) rather than a human-readable path
-// word. Conservative thresholds (>=24 chars, mixed alnum) so host names and short
-// path words are untouched.
-func looksLikeOpaqueSecret(seg string) bool {
-	if len(seg) < 24 {
-		return false
-	}
-	digits, letters, hasUpper := 0, 0, false
-	for i := 0; i < len(seg); i++ {
-		c := seg[i]
-		switch {
-		case c >= '0' && c <= '9':
-			digits++
-		case c >= 'a' && c <= 'z':
-			letters++
-		case c >= 'A' && c <= 'Z':
-			letters++
-			hasUpper = true
-		case c == '-' || c == '_':
-		default:
-			return false // a non-token char means it is not a single opaque secret
-		}
-	}
-	return digits > 0 && letters > 0 && (hasUpper || digits >= 4)
+	return s[:schemeEnd] + host
 }

@@ -12,11 +12,13 @@ import (
 	"github.com/daxchain-io/daxib/internal/domain"
 )
 
-// tx.go is the `tx` noun: send/status/wait/list. It is a thin host — it parses
-// flags into a domain request, opens the service lazily, and funnels the result
-// through renderTxOutcome (the §5.3/§5.9 contract). M4 binds NONE of daxie's EVM
-// gas/nonce flags and NO speedup/cancel/abandon (those are M5/RBF). A send signals
-// RBF (nSequence=0xfffffffd) in the SERVICE; a future `tx speedup` depends on it.
+// tx.go is the `tx` noun: send/speedup/cancel/status/wait/list. It is a thin host —
+// it parses flags into a domain request, opens the service lazily, and funnels the
+// result through renderTxOutcome (the §5.3/§5.9 contract). It binds NONE of daxie's
+// EVM gas/nonce flags. A send signals opt-in RBF (nSequence=0xfffffffd) in the
+// SERVICE; `tx speedup` and `tx cancel` are the BIP-125 RBF replacements that rely
+// on that signal — speedup rebuilds a higher-fee replacement to the same recipient,
+// cancel redirects all funds to a wallet change address (voiding the payment).
 
 // waitFlags bundles the --wait/--confirmations/--timeout trio shared by `tx send`
 // and `tx wait`.
@@ -59,10 +61,79 @@ func newTxCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newTxSendCmd(ctx, rs),
+		newTxSpeedupCmd(ctx, rs),
+		newTxCancelCmd(ctx, rs),
 		newTxStatusCmd(ctx, rs),
 		newTxWaitCmd(ctx, rs),
 		newTxListCmd(ctx, rs),
 	)
+	return cmd
+}
+
+// newTxSpeedupCmd builds `tx speedup <txid>` (RBF/BIP-125): replace an unconfirmed
+// send with a higher-fee tx paying the SAME recipient.
+func newTxSpeedupCmd(ctx context.Context, rs *rootState) *cobra.Command {
+	var wallet, feeRate string
+	var wf waitFlags
+	cmd := &cobra.Command{
+		Use:   "speedup <txid>",
+		Short: "Replace an unconfirmed send with a higher-fee transaction (RBF)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			waitOpts, err := wf.toWaitOpts(cmd, wf.wait)
+			if err != nil {
+				return err
+			}
+			svc, closeFn, err := openService(ctx, rs)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+			m := rs.flags.Mode()
+			sink := render.StderrProgress(cmd.ErrOrStderr(), m.JSON)
+			res, err := svc.SpeedupTx(cmd.Context(), domain.SpeedupRequest{
+				Wallet: wallet, Txid: args[0], FeeRate: feeRate, Yes: rs.flags.Yes, Wait: waitOpts,
+			}, sink)
+			return renderTxOutcome(cmd, m, res, err)
+		},
+	}
+	cmd.Flags().StringVar(&wallet, "wallet", "", "wallet that owns the tx (default: --wallet > DAXIB_WALLET > default)")
+	cmd.Flags().StringVar(&feeRate, "fee-rate", "", "new fee rate in sat/vByte (default: max(original+1, backend fast estimate))")
+	bindWaitFlags(cmd, &wf)
+	return cmd
+}
+
+// newTxCancelCmd builds `tx cancel <txid>` (RBF/BIP-125): replace an unconfirmed
+// send with a higher-fee tx that redirects ALL funds to a wallet-owned address,
+// voiding the original payment.
+func newTxCancelCmd(ctx context.Context, rs *rootState) *cobra.Command {
+	var wallet, feeRate string
+	var wf waitFlags
+	cmd := &cobra.Command{
+		Use:   "cancel <txid>",
+		Short: "Cancel an unconfirmed send by replacing it with a self-paying transaction (RBF)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			waitOpts, err := wf.toWaitOpts(cmd, wf.wait)
+			if err != nil {
+				return err
+			}
+			svc, closeFn, err := openService(ctx, rs)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+			m := rs.flags.Mode()
+			sink := render.StderrProgress(cmd.ErrOrStderr(), m.JSON)
+			res, err := svc.CancelTx(cmd.Context(), domain.CancelRequest{
+				Wallet: wallet, Txid: args[0], FeeRate: feeRate, Yes: rs.flags.Yes, Wait: waitOpts,
+			}, sink)
+			return renderTxOutcome(cmd, m, res, err)
+		},
+	}
+	cmd.Flags().StringVar(&wallet, "wallet", "", "wallet that owns the tx (default: --wallet > DAXIB_WALLET > default)")
+	cmd.Flags().StringVar(&feeRate, "fee-rate", "", "new fee rate in sat/vByte (default: max(original+1, backend fast estimate))")
+	bindWaitFlags(cmd, &wf)
 	return cmd
 }
 

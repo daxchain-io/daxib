@@ -145,7 +145,13 @@ func (s *Service) reconcilePolicyOrphans(ctx context.Context) {
 			// No journal record references this reservation ⇒ no bytes were ever
 			// broadcast ⇒ release (free the budget).
 			_ = eng.ReleaseOrphan(ctx, o.Network, o.ID)
-		case rec.Status == "broadcast" || rec.Status == "confirmed":
+		case rec.Status == "broadcast" || rec.Status == "confirmed" || rec.Status == "replaced":
+			// `broadcast`/`confirmed`: the bytes reached (or will reach) the chain ⇒
+			// commit. `replaced`: an RBF replacement superseded this record and charged
+			// ONLY the fee DELTA over this original's reservation — so the original's
+			// reservation must stay COMMITTED (counted), or the rolling-24h window
+			// under-counts the live replacement's full outflow (releasing it here would
+			// let an RBF cycle leak the original payment amount back into the budget).
 			_ = eng.CommitOrphan(ctx, o.Network, o.ID, rec.Txid)
 		default: // still `signed`/`failed` ⇒ no recorded broadcast ⇒ release
 			_ = eng.ReleaseOrphan(ctx, o.Network, o.ID)

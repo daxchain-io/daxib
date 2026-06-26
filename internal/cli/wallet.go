@@ -68,7 +68,7 @@ func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 
 			m := rs.flags.Mode()
-			disp, cerr := mnemonicCeremony(cmd.ErrOrStderr(), rs.flags.Yes, m.JSON, res.Mnemonic, res.BIP39Passphrase)
+			disp, cerr := mnemonicCeremony(cmd.ErrOrStderr(), cmd.InOrStdin(), rs.flags.Yes, m.JSON, res.Mnemonic, res.BIP39Passphrase)
 			if cerr != nil {
 				return cerr
 			}

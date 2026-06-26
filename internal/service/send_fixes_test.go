@@ -92,6 +92,41 @@ func TestSendTx_TaprootRecipientFeeNotUnderpaid(t *testing.T) {
 	}
 }
 
+// TestSendSmallTaprootRejectedAsDust is the CB-4 regression: a 300-sat send to a
+// P2TR recipient must be rejected PRE-BUILD with usage.dust_output (the P2TR dust
+// threshold is 330 > the P2WPKH 294), never built+signed then bounced by relay.
+func TestSendSmallTaprootRejectedAsDust(t *testing.T) {
+	fake := fakebackend.New()
+	fake.Tip = 800000
+	programUTXO(fake, canonicalReceive0, "d0"+strings.Repeat("0", 62), 0, 1_000_000)
+
+	svc, teardown := newSendService(t, fake)
+	defer teardown()
+
+	_, err := svc.SendTx(context.Background(), domain.SendRequest{
+		Wallet: "vec", To: taprootRecipient, Amount: "300sat", FeeRate: "5", Yes: true,
+	}, nil)
+	if err == nil {
+		t.Fatalf("a 300-sat P2TR send should be rejected as dust")
+	}
+	de := domain.AsError(err)
+	if de == nil || de.Code != domain.CodeUsageDustOutput {
+		t.Fatalf("err=%v, want usage.dust_output (P2TR dust threshold is 330)", err)
+	}
+
+	// A 294-sat send to a P2WPKH recipient is still accepted (the per-script gate did
+	// not over-reject the smaller-output type).
+	if _, perr := svc.SendTx(context.Background(), domain.SendRequest{
+		Wallet: "vec", To: extRecipient, Amount: "294sat", FeeRate: "5", Yes: true,
+	}, nil); perr != nil {
+		de := domain.AsError(perr)
+		if de != nil && de.Code == domain.CodeUsageDustOutput {
+			t.Fatalf("a 294-sat P2WPKH send was wrongly rejected as dust: %v", perr)
+		}
+		// Any other error (e.g. insufficient after fee) is fine for this assertion.
+	}
+}
+
 // TestDryRunDoesNotAdvanceChangeWatermark is the regression for
 // dryrun-advances-change-watermark: a --dry-run that emits change must PEEK the
 // change address (read-only) and never advance NextChange or materialize it in

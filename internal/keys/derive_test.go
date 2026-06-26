@@ -61,6 +61,7 @@ func TestNetworkAddressVectors(t *testing.T) {
 		want string
 	}{
 		{domain.NetworkTestnet, "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl"},
+		{domain.NetworkTestnet4, "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl"},
 		{domain.NetworkSignet, "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl"},
 		{domain.NetworkRegtest, "bcrt1q6rz28mcfaxtmd6v789l9rrlrusdprr9pz3cppk"},
 	}
@@ -97,6 +98,7 @@ func TestNetworkAddressPrefixes(t *testing.T) {
 	}{
 		{domain.NetworkMainnet, "bc1"},
 		{domain.NetworkTestnet, "tb1"},
+		{domain.NetworkTestnet4, "tb1"},
 		{domain.NetworkSignet, "tb1"},
 		{domain.NetworkRegtest, "bcrt1"},
 	}

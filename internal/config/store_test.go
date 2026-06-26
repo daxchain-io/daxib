@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/daxchain-io/daxib/internal/domain"
@@ -145,6 +146,135 @@ func TestMaskKeepsRefDropsLiteral(t *testing.T) {
 	got := MaskSecretRefs("https://node.example/v2/abcdef0123456789abcdef0123456789deadbeef")
 	if got != "https://node.example/v2/***" {
 		t.Errorf("literal secret not masked: %q", got)
+	}
+}
+
+// TestMaskRedactsUserinfo is the SEC-2 regression: a literal user:pass@host
+// credential must be redacted in the masked list/show output, in both the path and
+// no-path cases — but a ${env:}/${file:} reference passes through verbatim (the
+// reference is not the secret).
+func TestMaskRedactsUserinfo(t *testing.T) {
+	cases := map[string]string{
+		"https://alice:hunter2@node.example/path": "https://alice:***@node.example/path",
+		"https://alice:hunter2@node.example":      "https://alice:***@node.example",
+		// A bare-password userinfo (no user) still redacts.
+		"https://:onlypass@node.example/path": "https://:***@node.example/path",
+		// An ${env:} reference in the URL stays verbatim (not a literal credential).
+		"https://${env:USER}:${env:PASS}@node.example/path": "https://${env:USER}:${env:PASS}@node.example/path",
+	}
+	for in, want := range cases {
+		if got := MaskSecretRefs(in); got != want {
+			t.Errorf("MaskSecretRefs(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestRedactURLForErrorCollapsesLiteralKey is the SECLEAK-1 regression: the
+// error-facing redactor must NEVER leak a literal embedded key, including the four
+// low-entropy gap shapes that MaskSecretRefs' entropy heuristic lets through
+// (lowercase-no-digit, < 24 chars, dash-separated, dot-containing). Each must
+// collapse to scheme://host with no trace of the key. References stay verbatim.
+func TestRedactURLForErrorCollapsesLiteralKey(t *testing.T) {
+	leaks := map[string]string{ // url -> the key fragment that must NOT survive
+		"https://eth-mainnet.g.alchemy.com/v2/myShortKey":         "myShortKey",
+		"https://host.example/v2/dashed-api-key-value-here":       "dashed-api-key-value-here",
+		"https://host.example/v2/a.b.c.dotcontaining.secretvalue": "dotcontaining",
+		"https://host.example/v2/alllowercasenodigitsapikeyhere":  "alllowercasenodigitsapikeyhere",
+		// A genuine high-entropy hex key must also collapse (it already did via ***,
+		// but the error path now collapses the whole locator).
+		"https://node.example/v2/abcdef0123456789abcdef0123456789deadbeef": "abcdef0123456789",
+		// A literal user:pass@ userinfo credential.
+		"https://alice:hunter2supersecret@node.example/v2/path": "hunter2supersecret",
+		// A literal query-embedded key.
+		"https://node.example/api?apikey=sk-live-lowercasenodigitkey": "sk-live-lowercasenodigitkey",
+	}
+	for in, key := range leaks {
+		got := RedactURLForError(in)
+		if strings.Contains(got, key) {
+			t.Errorf("RedactURLForError(%q) leaked key fragment %q: %q", in, key, got)
+		}
+		if !strings.HasPrefix(got, "https://") {
+			t.Errorf("RedactURLForError(%q) = %q, want scheme://host form", in, got)
+		}
+		// The host must survive (operators still need to know which backend). It is
+		// the first /?#-delimited token after scheme://, sans userinfo.
+		host := strings.TrimPrefix(in, "https://")
+		if i := strings.IndexAny(host, "/?#"); i >= 0 {
+			host = host[:i]
+		}
+		if at := strings.LastIndexByte(host, '@'); at >= 0 {
+			host = host[at+1:]
+		}
+		if !strings.Contains(got, host) {
+			t.Errorf("RedactURLForError(%q) = %q dropped the host %q", in, got, host)
+		}
+	}
+
+	// References are NOT secrets: a tail that is purely ${env:}/${file:} refs (no
+	// literal path/query/userinfo at all) stays verbatim so the operator can audit
+	// which var/file is used. (A URL mixing a literal path word with a ref still
+	// collapses — the safe direction — because a low-entropy literal key is
+	// indistinguishable from a harmless path word, which is the very gap KNOWN-1
+	// closes.)
+	keepVerbatim := []string{
+		"https://${env:USER}:${env:PASS}@node.example", // ref userinfo, no literal tail
+		"https://node.example",                         // scheme://host only
+		"127.0.0.1:8332",                               // host:port Core endpoint, no scheme
+	}
+	for _, in := range keepVerbatim {
+		if got := RedactURLForError(in); got != in {
+			t.Errorf("RedactURLForError(%q) altered a reference-only URL: %q", in, got)
+		}
+	}
+
+	// A URL whose tail mixes harmless path words with a ${…} reference collapses to
+	// scheme://host (safe over-collapse; the reference visibility is sacrificed
+	// because a literal key cannot be told apart from a path word).
+	if got := RedactURLForError("https://node/api?key=${env:KEY}"); got != "https://node" {
+		t.Errorf("mixed literal+ref URL = %q, want https://node (safe collapse)", got)
+	}
+
+	// A host:port Core endpoint (no scheme) carries no path secret; userinfo still
+	// masks via the friendly masker.
+	if got := RedactURLForError("127.0.0.1:8332"); got != "127.0.0.1:8332" {
+		t.Errorf("RedactURLForError(host:port) = %q, want verbatim", got)
+	}
+}
+
+// TestRedactURLForErrorThroughDisplayURL is the SECLEAK-1 end-to-end regression: a
+// literal key supplied as the backend DisplayURL (the error-path locator) must not
+// appear in a backend error string nor its data["endpoint"]. It exercises the gap
+// the prior tests missed — TestDial_Unreachable_DoesNotLeakSecret only covered the
+// no-DisplayURL fallback, and TestMaskSecretRefs only the high-entropy hex case.
+func TestRedactURLForErrorThroughDisplayURL(t *testing.T) {
+	for _, key := range []string{
+		"myShortKey", "dashed-api-key-value-here", "dotcontaining", "alllowercasenodigitsapikeyhere",
+	} {
+		disp := RedactURLForError("https://node.example/v2/" + key)
+		if strings.Contains(disp, key) {
+			t.Fatalf("DisplayURL for key %q still leaks: %q", key, disp)
+		}
+	}
+}
+
+// TestDetectLiteralSecretUserinfoWithPath is the SEC-3 regression: a userinfo
+// credential must be flagged by the add-time heuristic whether or not the URL also
+// has a path (the userinfo check used to only fire in the no-path branch).
+func TestDetectLiteralSecretUserinfoWithPath(t *testing.T) {
+	cases := []struct {
+		url  string
+		warn bool
+	}{
+		{"https://alice:hunter2@node.example/path", true},
+		{"https://alice:hunter2@node.example", true},
+		{"https://node.example/path", false},
+		{"https://${env:USER}:${env:PASS}@node.example/path", false},
+	}
+	for _, tc := range cases {
+		got := urlHasLiteralSecret(tc.url)
+		if got != tc.warn {
+			t.Errorf("urlHasLiteralSecret(%q) = %v, want %v", tc.url, got, tc.warn)
+		}
 	}
 }
 

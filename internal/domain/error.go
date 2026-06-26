@@ -250,8 +250,7 @@ var codeExit = map[string]ExitCode{
 
 	// 9 — TX_CONFLICT (double-spend / replacement family)
 	"tx.input_spent":          ExitTxConflict, // bad-txns-inputs-missingorspent
-	"tx.already_mined":        ExitTxConflict, // RBF speedup/cancel target already confirmed
-	"tx.replaced":             ExitTxConflict,
+	"tx.replaced":             ExitTxConflict, // RBF target already resolved (confirmed/replaced)
 	"tx.replacement_rejected": ExitTxConflict,
 
 	// 10 — NOT_FOUND / READONLY

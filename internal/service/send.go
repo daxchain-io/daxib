@@ -329,14 +329,18 @@ func (s *Service) validateSendInputs(req domain.SendRequest) error {
 	if amountSat <= 0 {
 		return domain.Newf(domain.CodeUsageBadAmount, "send amount must be positive, got %q", req.Amount)
 	}
-	if amountSat < coinDustThreshold {
-		return domain.Newf(domain.CodeUsageDustOutput,
-			"amount %d sat is below the dust threshold; the recipient output would be unspendable", amountSat)
-	}
 	params := s.chainParams()
 	toAddr, derr := btcutil.DecodeAddress(req.To, params)
 	if derr != nil || !toAddr.IsForNet(params) {
 		return domain.Newf(domain.CodeUsageBadAddress, "--to %q is not a valid %s address", req.To, s.net)
+	}
+	// Gate the recipient amount against the dust threshold computed from the REAL
+	// recipient scriptPubKey (CB-4), not the fixed P2WPKH 294 — a small Taproot/legacy
+	// send would otherwise pass a 294 check then be bounced as a dust output by relay.
+	if dustThreshold := recipientDustThreshold(toAddr); amountSat < dustThreshold {
+		return domain.Newf(domain.CodeUsageDustOutput,
+			"amount %d sat is below the %d-sat dust threshold for this recipient address type; the output would be unspendable",
+			amountSat, dustThreshold)
 	}
 	// Validate the fee inputs HERE, before any backend dial, so a malformed
 	// --fee-rate / --speed is a clean usage error (exit 2) rather than surfacing as a
@@ -373,6 +377,18 @@ func actualSignedVSize(tx *wire.MsgTx) int64 {
 	total := tx.SerializeSize()
 	weight := int64(base*3 + total)
 	return (weight + 3) / 4
+}
+
+// recipientDustThreshold returns the dust threshold (sats) for a recipient address
+// computed from its REAL scriptPubKey via coinselect.DustThresholdForScript (CB-4).
+// A script-build failure (should not happen for a decoded address) falls back to the
+// conservative P2WPKH 294 so the gate never under-rejects.
+func recipientDustThreshold(addr btcutil.Address) int64 {
+	script, err := txscript.PayToAddrScript(addr)
+	if err != nil {
+		return coinDustThreshold
+	}
+	return coinselect.DustThresholdForScript(script)
 }
 
 // scriptForAddress decodes a bech32 address and returns its scriptPubKey.

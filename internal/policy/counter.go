@@ -116,12 +116,15 @@ func sumWindow(cf *counterFile, now time.Time, excludeID string) *big.Int {
 		if e.State == stateReleased {
 			continue
 		}
-		ts := parseTS(e.TS)
-		if !ts.After(cutoff) {
+		ts, ok := parseTS(e.TS)
+		// CB-1: an UNPARSEABLE timestamp counts as IN-window (the safe
+		// over-counting direction for a fail-closed component). A reset/zeroed/corrupt
+		// ts must never silently drop a committed debit out of the window.
+		if ok && !ts.After(cutoff) {
 			continue
 		}
-		v, ok := new(big.Int).SetString(e.Sat, 10)
-		if !ok {
+		v, vok := new(big.Int).SetString(e.Sat, 10)
+		if !vok {
 			continue
 		}
 		total.Add(total, v)
@@ -135,12 +138,16 @@ func prune(cf *counterFile, now time.Time) {
 	cutoff := now.Add(-window)
 	kept := cf.Entries[:0]
 	for _, e := range cf.Entries {
-		ts := parseTS(e.TS)
-		aged := !ts.After(cutoff)
+		ts, ok := parseTS(e.TS)
+		// CB-1: an UNPARSEABLE timestamp is treated as IN-window (never aged), so a
+		// non-released row with a corrupt ts is KEPT (and thus still counted by
+		// sumWindow) rather than silently dropped — the safe direction.
+		aged := ok && !ts.After(cutoff)
 		if e.State == stateReleased {
 			// Drop released rows that have aged out; keep recent released rows so a
 			// concurrent re-sum sees a consistent ledger (cheap; pruned next window).
-			if aged {
+			// A released row with a corrupt ts is dropped (it does not count anyway).
+			if aged || !ok {
 				continue
 			}
 		}
@@ -163,14 +170,16 @@ func (cf *counterFile) findEntry(id string) *counterEntry {
 	return nil
 }
 
-// parseTS parses RFC3339Nano/RFC3339; a parse failure returns the zero time, which
-// is treated as inside the window (the safe over-counting direction).
-func parseTS(s string) time.Time {
+// parseTS parses RFC3339Nano/RFC3339, returning (t, true) on success. On a parse
+// failure it returns (zero, false); callers treat !ok as IN-window (sumWindow
+// counts the row, prune keeps a non-released row) — the safe over-counting
+// direction for the fail-closed counter (CB-1).
+func parseTS(s string) (time.Time, bool) {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-		return t
+		return t, true
 	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t
+		return t, true
 	}
-	return time.Time{}
+	return time.Time{}, false
 }

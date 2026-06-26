@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/daxchain-io/daxib/internal/domain"
@@ -71,7 +72,7 @@ func TestMnemonicCeremonyYesAndJSON(t *testing.T) {
 		{"yes+json", true, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			disp, err := mnemonicCeremony(nil, tc.yes, tc.jsonMode, canonicalMnemonic, "")
+			disp, err := mnemonicCeremony(nil, nil, tc.yes, tc.jsonMode, canonicalMnemonic, "")
 			if err != nil {
 				t.Fatalf("ceremony: %v", err)
 			}
@@ -79,5 +80,48 @@ func TestMnemonicCeremonyYesAndJSON(t *testing.T) {
 				t.Errorf("echoInResult = %v, want %v", disp.echoInResult, tc.wantEchoResult)
 			}
 		})
+	}
+}
+
+// uniformMnemonic is a 12-"word" string whose every position is the SAME token, so
+// the interactive verify (which asks for two RANDOM positions) always expects the
+// same answer regardless of which positions crypto/rand picks. mnemonicCeremony
+// only splits on whitespace + compares — it does not BIP-39-validate — so this is a
+// valid driver for the verify branch.
+const uniformMnemonic = "alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha"
+
+// TestMnemonicCeremonyUsesInjectedStream is the KNOWN-3/TC-1 regression: the
+// interactive ceremony reads its confirmation input from the INJECTED stream (not
+// os.Stdin). A correct two-word re-entry returns echoInResult=false (the seed was
+// shown + verified on the terminal, so the result redacts it), matching is
+// case-insensitive + whitespace-trimmed, and a wrong word is a confirmation_required
+// error.
+func TestMnemonicCeremonyUsesInjectedStream(t *testing.T) {
+	var out strings.Builder
+
+	// (a) Correct re-entry (case-insensitive + surrounding whitespace) => verified,
+	// redact from the result. The first line answers "Press Enter"; the next two
+	// answer the two word prompts.
+	in := strings.NewReader("\n  ALPHA \n\tAlpha\n")
+	disp, err := mnemonicCeremony(&out, in, false, false, uniformMnemonic, "")
+	if err != nil {
+		t.Fatalf("correct ceremony: %v", err)
+	}
+	if disp.echoInResult {
+		t.Errorf("echoInResult=true after a verified ceremony; want false (redact from result)")
+	}
+	if !strings.Contains(out.String(), "Mnemonic confirmed.") {
+		t.Errorf("ceremony did not confirm:\n%s", out.String())
+	}
+
+	// (b) A wrong word fails with usage.confirmation_required naming the position.
+	in2 := strings.NewReader("\nnotaword\nnotaword\n")
+	_, err2 := mnemonicCeremony(&out, in2, false, false, uniformMnemonic, "")
+	if err2 == nil {
+		t.Fatal("wrong word should fail the ceremony")
+	}
+	var de *domain.Error
+	if !errors.As(err2, &de) || de.Code != "usage.confirmation_required" {
+		t.Fatalf("wrong-word err=%v, want usage.confirmation_required", err2)
 	}
 }

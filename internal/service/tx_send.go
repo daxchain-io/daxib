@@ -264,7 +264,7 @@ const (
 // rebroadcast.
 func (s *Service) broadcastClassified(ctx context.Context, client backend.Client, raw []byte, sink domain.EventSink) (broadcastOutcome, string, error) {
 	var lastErr error
-	for i, d := range broadcastBackoff {
+	for _, d := range broadcastBackoff {
 		if d > 0 {
 			emit(sink, "broadcast", "retrying after transport error")
 			select {
@@ -280,18 +280,13 @@ func (s *Service) broadcastClassified(ctx context.Context, client backend.Client
 		lastErr = err
 		o, mapped, retry := classifyBroadcastErr(err)
 		if o == outcomeAccepted {
-			// "already known"/"already in mempool" — treat as accepted; recover the
-			// txid from the tx bytes is the caller's job (we return empty here and the
-			// caller uses art.txid). Use a sentinel: re-broadcast returns the txid the
-			// node echoes, but already-known nodes often echo it too. Fall through to a
-			// fresh Broadcast call result is not possible; return accepted with no txid
-			// and let the caller fill art.txid.
+			// already-known reject => accepted; the caller fills art.txid since the node
+			// echoes no txid here.
 			return outcomeAccepted, "", nil
 		}
 		if !retry {
 			return outcomeRejected, "", mapped
 		}
-		_ = i
 	}
 	return outcomeTransportExhausted, "", lastErr
 }
@@ -299,7 +294,16 @@ func (s *Service) broadcastClassified(ctx context.Context, client backend.Client
 // classifyBroadcastErr maps a backend broadcast error to an outcome + a mapped
 // domain error + whether it is transport-retryable. It reads the error string
 // (Core sendrawtransaction reject reasons + Esplora 400 bodies) and the
-// backend.unreachable class.
+// backend.unreachable/rpc_error class.
+//
+// CONSERVATIVE policy (KNOWN-2/TXR-1/TXR-2/CB-2): a tx is terminalized as `failed`
+// ONLY on a POSITIVELY-MATCHED permanent consensus/policy reject (the bad-txns /
+// min-relay / dust set below). A node that merely ANSWERED with an error
+// (backend.rpc_error), a recognised-transient string (warmup/-28/503/rate-limit),
+// or any UNMATCHED/novel error is treated as transport-exhausted (the record stays
+// `signed`, recoverable, and is rebroadcast on the next send-lock / `tx wait`).
+// Fail-open toward recoverability: it is far safer to keep a possibly-live tx
+// trackable than to wrongly declare it dead.
 func classifyBroadcastErr(err error) (broadcastOutcome, error, bool) {
 	if err == nil {
 		return outcomeAccepted, nil, false
@@ -315,7 +319,33 @@ func classifyBroadcastErr(err error) (broadcastOutcome, error, bool) {
 		return outcomeAccepted, nil, false
 	}
 
-	// Permanent rejects (NOT a rebroadcast-the-same-bytes class).
+	// TRANSIENT-FIRST (CLS-1/KNOWN-2): classify positively-transient signals BEFORE
+	// the permanent-reject substring scan. A node that merely TIMED OUT, was
+	// UNREACHABLE, ANSWERED-with-an-error, or returned a 5xx/-28/rate-limit envelope
+	// has NOT proven the tx invalid — even if the surrounding transport/HTML body or a
+	// redacted URL happens to contain a permanent-reject substring (e.g. an HTTP 503
+	// proxy page that mentions "scriptpubkey", or a `backend.rpc_error` whose detail
+	// echoes "dust"/"non-final"). Terminalizing those would strand a possibly-live tx.
+	// A GENUINE consensus reject arrives as a node answer with NO transient marker
+	// (e.g. `RPC error -25: bad-txns-inputs-missingorspent`) and still falls through to
+	// the permanent scan below.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return outcomeTransportExhausted, domain.Wrap(domain.CodeBackendUnreachable, "broadcast transport failure", err), true
+	}
+	if de := domain.AsError(err); de != nil && de.Code == domain.CodeBackendUnreachable {
+		return outcomeTransportExhausted, de, true
+	}
+	if looksTransientBroadcast(msg) {
+		// An rpc_error wrapper or an untyped string carrying a transient marker: a
+		// warming node (-28), a 5xx, a rate-limit, a dial/transport failure — all
+		// retryable. Leave the record recoverable rather than terminalizing a possibly
+		// live tx (TXR-1/TXR-2). The 5xx test is explicit (no fragile Contains(msg,"5")).
+		return outcomeTransportExhausted, domain.Wrap(domain.CodeBackendUnreachable, "broadcast transport failure", err), true
+	}
+
+	// Permanent rejects (NOT a rebroadcast-the-same-bytes class). ONLY these
+	// positively-matched consensus/policy reject reasons terminalize the record, and
+	// ONLY after the transient signals above were ruled out.
 	switch {
 	case strings.Contains(msg, "bad-txns-inputs-missingorspent") || strings.Contains(msg, "missing inputs") || strings.Contains(msg, "missing-inputs"):
 		return outcomeRejected, domain.Wrap(domain.CodeTxInputSpent, "broadcast rejected: an input was already spent", err), false
@@ -325,20 +355,37 @@ func classifyBroadcastErr(err error) (broadcastOutcome, error, bool) {
 		return outcomeRejected, domain.Wrap(domain.CodeTxBroadcastRejected, "broadcast rejected by the network", err), false
 	}
 
-	// Transport: deadline/cancel, dial failure, 5xx, or a wrapped backend.unreachable.
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return outcomeTransportExhausted, domain.Wrap(domain.CodeBackendUnreachable, "broadcast transport failure", err), true
+	// A typed `backend.rpc_error` with no transient marker AND no permanent-reject
+	// substring: the node answered with something we cannot positively classify as a
+	// consensus reject — leave it recoverable (TXR-1). A real consensus reject from
+	// Core carries a bad-txns/min-relay/dust string and was caught above.
+	if de := domain.AsError(err); de != nil && de.Code == domain.CodeBackendRPCError {
+		return outcomeTransportExhausted, domain.Wrap(domain.CodeBackendUnreachable, "broadcast transport failure (backend answered with an error)", err), true
 	}
-	if de := domain.AsError(err); de != nil && de.Code == domain.CodeBackendUnreachable {
-		return outcomeTransportExhausted, de, true
-	}
-	if strings.Contains(msg, "connection refused") || strings.Contains(msg, "timeout") || strings.Contains(msg, "no such host") || strings.Contains(msg, "eof") || strings.Contains(msg, "5") && strings.Contains(msg, "server error") {
-		return outcomeTransportExhausted, domain.Wrap(domain.CodeBackendUnreachable, "broadcast transport failure", err), true
-	}
-	// An unclassified rpc_error from the backend: treat as a permanent reject so we
-	// terminalize rather than spin (a genuinely transient error will have surfaced
-	// as backend.unreachable above).
-	return outcomeRejected, domain.Wrap(domain.CodeTxBroadcastRejected, "broadcast rejected by the backend", err), false
+
+	// An UNMATCHED/novel error string: fail-open toward recoverability. Leave the
+	// record `signed` (recoverable) rather than terminalizing a possibly-live tx —
+	// the KNOWN-2 conservative default. A genuinely-permanent reject not in the set
+	// above costs at most one harmless rebroadcast (the node re-rejects it).
+	return outcomeTransportExhausted, domain.Wrap(domain.CodeBackendUnreachable, "broadcast transport failure (unclassified backend error)", err), true
+}
+
+// looksTransientBroadcast reports whether a lowercased broadcast error string
+// carries a POSITIVE transient marker: a dial/transport failure, a warming/loading
+// node (-28), an HTTP 5xx class, a rate-limit, or a generic "unavailable". The 5xx
+// classes are matched explicitly (no fragile Contains(msg,"5") digit match — TXR-2).
+// It is consulted BEFORE the permanent-reject scan so a transient envelope that also
+// embeds a permanent substring is NOT wrongly terminalized (CLS-1).
+func looksTransientBroadcast(msg string) bool {
+	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "no such host") || strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "connection reset") || strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "-28") || strings.Contains(msg, "in warmup") ||
+		strings.Contains(msg, "warming up") || strings.Contains(msg, "loading") ||
+		strings.Contains(msg, "initializing") || strings.Contains(msg, "try again") ||
+		strings.Contains(msg, "rate limit") || strings.Contains(msg, "too many requests") ||
+		strings.Contains(msg, "unavailable") || strings.Contains(msg, "503") ||
+		strings.Contains(msg, "502") || strings.Contains(msg, "504")
 }
 
 // rejectReason returns the human reject reason recorded on a failed journal

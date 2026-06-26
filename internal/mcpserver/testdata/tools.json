@@ -678,6 +678,12 @@
         "raw_tx_hex": {
           "type": "string"
         },
+        "replacement": {
+          "type": "boolean"
+        },
+        "replaces_txid": {
+          "type": "string"
+        },
         "resume": {
           "type": "string"
         },
@@ -912,6 +918,12 @@
         "raw_tx_hex": {
           "type": "string"
         },
+        "replacement": {
+          "type": "boolean"
+        },
+        "replaces_txid": {
+          "type": "string"
+        },
         "resume": {
           "type": "string"
         },
@@ -1066,6 +1078,12 @@
           ]
         },
         "raw_tx_hex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "boolean"
+        },
+        "replaces_txid": {
           "type": "string"
         },
         "resume": {

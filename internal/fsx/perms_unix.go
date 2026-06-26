@@ -4,12 +4,20 @@ package fsx
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"syscall"
 
 	"github.com/daxchain-io/daxib/internal/domain"
 	"golang.org/x/sys/unix"
 )
+
+// permWarnSink receives the non-fatal group-read-by-foreign-group warning. It is
+// a package variable so the cli frontend can route it to stderr and tests can
+// capture it. Defaults to os.Stderr. It lives in the POSIX file because only the
+// POSIX permission path emits this warning (the Windows DACL path does not), so on
+// the Windows build it would otherwise be dead code.
+var permWarnSink io.Writer = os.Stderr
 
 // permErr builds the canonical hard-failure domain error naming the file and the
 // remedy. It lives in the POSIX file because only the POSIX rule reports modes;

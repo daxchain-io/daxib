@@ -120,3 +120,125 @@ func TestPolicyShowNoPolicyPermissive(t *testing.T) {
 		t.Errorf("expected present:false with no policy:\n%s", stdout)
 	}
 }
+
+// TestPolicyDefaultAllowlistOff is the KNOWN-4/DLC-2 regression: a bare `policy
+// set` (no --allowlist flag) must leave the allowlist OFF (petty-cash default), so
+// a send to ANY address within limits is ALLOWED while the denylist + limits stay
+// enforced. It also pins the human `policy show` off-message.
+func TestPolicyDefaultAllowlistOff(t *testing.T) {
+	isolatePolicy(t)
+
+	// Bootstrap WITHOUT --allowlist: the default must be off.
+	if _, stderr, code := execCLI(t, "policy", "set",
+		"--max-tx", "100000", "--network", "regtest"); code != 0 {
+		t.Fatalf("bare policy set exit=%d, want 0:\n%s", code, stderr)
+	}
+
+	// policy show --json reports allowlist_enabled:false on the default block.
+	stdout, _, code := execCLI(t, "--json", "policy", "show")
+	if code != 0 {
+		t.Fatalf("policy show exit=%d:\n%s", code, stdout)
+	}
+	var show struct {
+		Default struct {
+			AllowlistOn bool `json:"allowlist_enabled"`
+		} `json:"default"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &show); err != nil {
+		t.Fatalf("show json: %v\n%s", err, stdout)
+	}
+	if show.Default.AllowlistOn {
+		t.Fatalf("bare `policy set` yielded allowlist_enabled=true; KNOWN-4 wants OFF by default:\n%s", stdout)
+	}
+
+	// The human render states the off-message loudly.
+	human, _, hcode := execCLI(t, "policy", "show")
+	if hcode != 0 {
+		t.Fatalf("policy show (human) exit=%d:\n%s", hcode, human)
+	}
+	if !strings.Contains(human, "allowlist: off (sends allowed to any address within limits)") {
+		t.Errorf("policy show should state the allowlist-off message:\n%s", human)
+	}
+
+	// A `policy check` to a NON-allowlisted address within limits is ALLOWED (exit
+	// 0) — the allowlist gate is off, but the per-tx limit still applies.
+	if _, stderr, ccode := execCLI(t, "policy", "check",
+		"--to", "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", "--amount", "1000sat", "--fee-rate", "5"); ccode != 0 {
+		t.Fatalf("check to non-allowlisted addr within limits exit=%d, want 0 (allowlist off):\n%s", ccode, stderr)
+	}
+
+	// The denylist is STILL enforced even with the allowlist off.
+	if _, stderr, dcode := execCLI(t, "policy", "deny",
+		"bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"); dcode != 0 {
+		t.Fatalf("policy deny exit=%d:\n%s", dcode, stderr)
+	}
+	if _, _, ccode := execCLI(t, "policy", "check",
+		"--to", "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", "--amount", "1000sat", "--fee-rate", "5"); ccode != 3 {
+		t.Fatalf("denylisted check exit=%d, want 3 (denylist enforced regardless of allowlist)", ccode)
+	}
+}
+
+// TestPolicyAllowDenyCommands is the TC-6 coverage for `policy allow`/`policy deny`:
+// the allow pin shows up in `policy show`, a bad address is a clean usage exit 2.
+func TestPolicyAllowDenyCommands(t *testing.T) {
+	isolatePolicy(t)
+	const addr = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+
+	// Bootstrap a policy first (allow needs a sealed anchor).
+	if _, stderr, code := execCLI(t, "policy", "set", "--max-tx", "100000", "--network", "regtest"); code != 0 {
+		t.Fatalf("policy set exit=%d:\n%s", code, stderr)
+	}
+	if _, stderr, code := execCLI(t, "policy", "allow", addr, "--label", "exchange"); code != 0 {
+		t.Fatalf("policy allow exit=%d:\n%s", code, stderr)
+	}
+	stdout, _, code := execCLI(t, "policy", "show")
+	if code != 0 {
+		t.Fatalf("policy show exit=%d:\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, addr) {
+		t.Errorf("policy show does not list the allowed address:\n%s", stdout)
+	}
+
+	if _, stderr, code := execCLI(t, "policy", "deny", addr); code != 0 {
+		t.Fatalf("policy deny exit=%d:\n%s", code, stderr)
+	}
+
+	// A bad address to `policy allow` is a clean usage error (exit 2).
+	if _, _, code := execCLI(t, "policy", "allow", "not-a-valid-address"); code != 2 {
+		t.Fatalf("policy allow <bad-addr> exit=%d, want 2", code)
+	}
+}
+
+// TestPolicyChangeAdminPassphraseCmd is the TC-6 coverage for
+// `policy change-admin-passphrase`: after a rotation a follow-up mutation needs the
+// NEW passphrase, and `policy verify` exits 0 on the resealed policy.
+func TestPolicyChangeAdminPassphraseCmd(t *testing.T) {
+	isolatePolicy(t) // sets DAXIB_ADMIN_PASSPHRASE=admin-secret-123
+
+	if _, stderr, code := execCLI(t, "policy", "set", "--max-tx", "100000", "--network", "regtest"); code != 0 {
+		t.Fatalf("policy set exit=%d:\n%s", code, stderr)
+	}
+
+	// Rotate to a new admin passphrase via the env channel.
+	t.Setenv("DAXIB_ADMIN_NEW_PASSPHRASE", "rotated-admin-456")
+	if _, stderr, code := execCLI(t, "policy", "change-admin-passphrase"); code != 0 {
+		t.Fatalf("change-admin-passphrase exit=%d:\n%s", code, stderr)
+	}
+
+	// `policy verify` is passphrase-free and exits 0 on the resealed policy.
+	if _, _, code := execCLI(t, "policy", "verify"); code != 0 {
+		t.Fatalf("policy verify after rotation exit=%d, want 0", code)
+	}
+
+	// The OLD admin passphrase no longer authenticates a mutation (admin_auth, exit 4).
+	t.Setenv("DAXIB_ADMIN_NEW_PASSPHRASE", "")
+	if _, _, code := execCLI(t, "policy", "set", "--max-tx", "200000", "--network", "regtest"); code != 4 {
+		t.Fatalf("mutation under the OLD passphrase exit=%d, want 4 (admin_auth)", code)
+	}
+
+	// The NEW admin passphrase DOES authenticate a follow-up mutation.
+	t.Setenv("DAXIB_ADMIN_PASSPHRASE", "rotated-admin-456")
+	if _, stderr, code := execCLI(t, "policy", "set", "--max-tx", "200000", "--network", "regtest"); code != 0 {
+		t.Fatalf("mutation under the NEW passphrase exit=%d, want 0:\n%s", code, stderr)
+	}
+}

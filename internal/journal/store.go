@@ -205,6 +205,9 @@ type StateMutation struct {
 	Confirmations *int64
 	BlockHeight   *int64
 	Error         *string
+	// ReplacedBy stamps the original record's ReplacedByID when an RBF replacement is
+	// accepted (the original transitions to StatusReplaced in the same append).
+	ReplacedBy *string
 }
 
 // applyTo mutates dst with the non-nil fields of m. Status is always applied.
@@ -223,6 +226,9 @@ func (m StateMutation) applyTo(dst *Record) {
 	}
 	if m.Error != nil {
 		dst.Error = m.Error
+	}
+	if m.ReplacedBy != nil {
+		dst.ReplacedByID = *m.ReplacedBy
 	}
 }
 

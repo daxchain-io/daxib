@@ -202,14 +202,25 @@ func (s *Service) recordResult(rec *journal.Record, st domain.TxStatus) domain.T
 	status := domain.TxState(rec.Status)
 	confirmations := rec.Confirmations
 	blockHeight := rec.BlockHeight
-	if st.Confirmed && st.Confirmations >= confirmations {
+	switch {
+	case st.Confirmed:
+		// The backend's current depth is authoritative — adopt it UNCONDITIONALLY,
+		// even when it SHRANK (a chain reorg can reduce a tx's confirmation count;
+		// CB-8). A stale higher count must never be retained.
 		confirmations = st.Confirmations
 		blockHeight = st.BlockHeight
 		if st.Confirmations >= defaultConfirmations {
 			status = domain.TxStateConfirmed
+		} else {
+			status = domain.TxStatePending
 		}
-	} else if rec.Status == journal.StatusBroadcast && st.Confirmations == 0 && st.BlockHeight == 0 && !st.Confirmed {
+	case (rec.Status == journal.StatusBroadcast || rec.Status == journal.StatusConfirmed) && st.Confirmations == 0 && st.BlockHeight == 0:
+		// A previously broadcast/confirmed record that the backend now reports as
+		// unconfirmed (0 confs) — a reorg dropped it back to the mempool. Demote to
+		// pending and zero the stale depth rather than retaining `confirmed` (CB-8).
 		status = domain.TxStatePending
+		confirmations = 0
+		blockHeight = 0
 	}
 
 	outs := make([]domain.TxOutputRef, 0, len(rec.Outputs))

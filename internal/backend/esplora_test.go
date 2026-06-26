@@ -179,6 +179,33 @@ func TestEsplora_RPCError(t *testing.T) {
 	}
 }
 
+// TestEsplora_RPCError_DoesNotLeakKey proves an embedded API key in the Esplora
+// base URL never reaches the rpc_error message OR its data.endpoint
+// (KNOWN-1/TC-3), with no service-supplied DisplayURL — covering the trailing-slash
+// base-trim case too (CB-3).
+func TestEsplora_RPCError_DoesNotLeakKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	const key = "lowercaseapikeyabcdef0123456789xyz"
+	o := Options{Type: domain.BackendEsplora, URL: srv.URL + "/v2/" + key + "/", Network: domain.NetworkMainnet}
+	c := newEsploraClient(o, srv.Client())
+	_, err := c.TipHeight(context.Background())
+	if err == nil {
+		t.Fatal("expected an rpc_error")
+	}
+	if strings.Contains(err.Error(), key) {
+		t.Fatalf("rpc_error leaked the key: %v", err)
+	}
+	var de *domain.Error
+	if errors.As(err, &de) {
+		if ep, _ := de.Data["endpoint"].(string); strings.Contains(ep, key) {
+			t.Fatalf("data.endpoint leaked the key: %q", ep)
+		}
+	}
+}
+
 // TestEsplora_Unreachable proves a dead endpoint maps to backend.unreachable
 // (exit 6, retryable) via Dial's reachability probe.
 func TestEsplora_Unreachable(t *testing.T) {

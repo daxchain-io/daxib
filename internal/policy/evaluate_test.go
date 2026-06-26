@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/daxchain-io/daxib/internal/domain"
 )
@@ -205,6 +206,46 @@ func TestCounterFailsClosedOnCorruption(t *testing.T) {
 	_, err := eng.Reserve(ctx, Check{Network: "regtest", Recipient: recipB, AmountSat: 1, FeeSat: 1})
 	if got := domain.AsError(err).Code; got != codeStateError {
 		t.Fatalf("corrupt counter: code=%s want %s (fail-closed)", got, codeStateError)
+	}
+}
+
+// TestSumWindowCountsCorruptTimestamp is the CB-1 regression: a committed debit
+// whose timestamp does not parse must be counted as IN-window (the fail-closed
+// over-counting direction), never silently dropped — and prune must keep it.
+func TestSumWindowCountsCorruptTimestamp(t *testing.T) {
+	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	cf := &counterFile{
+		Version: counterVersion,
+		Network: "regtest",
+		Entries: []counterEntry{
+			{ID: "ok", TS: now.Add(-time.Hour).UTC().Format(time.RFC3339Nano), Sat: "100", State: stateCommitted},
+			{ID: "corrupt", TS: "not-a-timestamp", Sat: "250", State: stateCommitted},
+			{ID: "released-corrupt", TS: "also-garbage", Sat: "999", State: stateReleased},
+		},
+	}
+	got := sumWindow(cf, now, "")
+	// The in-window 100 + the corrupt-ts committed 250 count; the released row does not.
+	if got.Int64() != 350 {
+		t.Fatalf("sumWindow=%s, want 350 (corrupt-ts committed row must count, released must not)", got)
+	}
+
+	// prune keeps the non-released corrupt-ts row (so a later re-sum still counts it),
+	// and drops the released corrupt-ts row.
+	prune(cf, now)
+	var keptCorrupt, keptReleased bool
+	for _, e := range cf.Entries {
+		if e.ID == "corrupt" {
+			keptCorrupt = true
+		}
+		if e.ID == "released-corrupt" {
+			keptReleased = true
+		}
+	}
+	if !keptCorrupt {
+		t.Errorf("prune dropped the corrupt-ts committed row; it must be kept (fail-closed)")
+	}
+	if keptReleased {
+		t.Errorf("prune kept a released corrupt-ts row; it should be dropped")
 	}
 }
 

@@ -239,7 +239,7 @@ func (s *Service) backendOptions(ep config.Endpoint) (backend.Options, error) {
 	return backend.Options{
 		Type:        domain.BackendType(ep.Type),
 		URL:         url,
-		DisplayURL:  config.MaskSecretRefs(ep.URLRef),
+		DisplayURL:  config.RedactURLForError(ep.URLRef),
 		Network:     domain.Network(ep.Network),
 		RPCUser:     user,
 		RPCPassword: pass,

@@ -311,16 +311,20 @@ func (e *Engine) Reserve(ctx context.Context, req Check) (Reservation, error) {
 		}
 		now := e.now()
 		id := ulid(now)
+		// The counter row records the WINDOW charge (delta for an RBF replacement,
+		// full spend for a normal send), so the rolling-24h sum never double-counts an
+		// original payment a replacement supersedes.
+		charge := req.windowCharge()
 		cf.Entries = append(cf.Entries, counterEntry{
 			ID:    id,
 			TS:    now.UTC().Format(time.RFC3339Nano),
-			Sat:   big.NewInt(req.spendSat()).String(),
+			Sat:   big.NewInt(charge).String(),
 			State: stateReserved,
 		})
 		if werr := e.writeCounter(req.Network, cf, now); werr != nil {
 			return werr
 		}
-		res = Reservation{id: id, network: req.Network, sat: req.spendSat(), engine: e}
+		res = Reservation{id: id, network: req.Network, sat: charge, engine: e}
 		return nil
 	})
 	if lerr != nil {

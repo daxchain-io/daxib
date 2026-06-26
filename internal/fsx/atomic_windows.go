@@ -19,6 +19,10 @@ import (
 // survives the rename onto the destination (rename preserves the source's explicit
 // ACL), so the final secret file is owner-only too.
 func openTemp(path string, mode os.FileMode) (*os.File, error) {
+	// The unix POSIX mode does not apply on Windows: the owner-only DACL applied
+	// below (ownerOnlySecurityAttributes) is the access control, superseding `mode`.
+	// The parameter is kept so the cross-platform signature matches atomic_unix.go.
+	_ = mode
 	p, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err

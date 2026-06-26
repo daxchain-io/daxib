@@ -125,6 +125,12 @@ func (s *Service) PolicyCounters(ctx context.Context) (PolicyCountersResult, err
 // config it writes the anchor; on a read-only config it returns the anchor JSON for
 // out-of-band landing (--anchor-out). It refuses to replace an existing trust root.
 func (s *Service) PolicySet(ctx context.Context, in PolicySetInput) (PolicyMutationResult, error) {
+	// Normalize + validate the limit flags FIRST so a malformed/unit-suffixed limit
+	// can never reach the sealed body (where it would fail OPEN at eval).
+	in, nerr := in.normalizeLimits()
+	if nerr != nil {
+		return PolicyMutationResult{}, nerr
+	}
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return PolicyMutationResult{}, err

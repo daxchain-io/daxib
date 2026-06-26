@@ -113,8 +113,25 @@ func TestTxWaitArgCount(t *testing.T) {
 
 func TestTxUnknownSubcommand(t *testing.T) {
 	isolateKeystore(t)
-	if _, _, code := execCLI(t, "tx", "speedup"); code != 2 {
+	// `speedup` is now a REAL subcommand, so an unknown-verb test must use a genuinely
+	// unknown verb to exercise cobra's unknown-command path (exit 2).
+	if _, _, code := execCLI(t, "tx", "frobnicate"); code != 2 {
 		t.Errorf("unknown tx subcommand exit=%d, want 2", code)
+	}
+}
+
+// TestTxReplaceMissingTxidExit2 covers the ExactArgs(1) contract on the RBF verbs:
+// `tx speedup`/`tx cancel` with no txid is a clean usage error (exit 2), never a
+// hang or a nil-deref.
+func TestTxReplaceMissingTxidExit2(t *testing.T) {
+	isolateKeystore(t)
+	for _, verb := range []string{"speedup", "cancel"} {
+		if _, _, code := execCLI(t, "tx", verb); code != 2 {
+			t.Errorf("tx %s no-txid exit=%d, want 2", verb, code)
+		}
+		if _, _, code := execCLI(t, "tx", verb, "a", "b"); code != 2 {
+			t.Errorf("tx %s two-arg exit=%d, want 2", verb, code)
+		}
 	}
 }
 
@@ -130,16 +147,15 @@ func TestTxHelpListsSubcommands(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("tx --help exit=%d, want 0", code)
 	}
-	for _, sub := range []string{"send", "status", "wait", "list"} {
+	// send/status/wait/list plus the RBF commands speedup/cancel (BIP-125).
+	for _, sub := range []string{"send", "speedup", "cancel", "status", "wait", "list"} {
 		if !strings.Contains(stdout, sub) {
 			t.Errorf("tx --help missing subcommand %q:\n%s", sub, stdout)
 		}
 	}
-	// M5/RBF commands must NOT appear in M4.
-	for _, leak := range []string{"speedup", "cancel", "abandon"} {
-		if strings.Contains(stdout, leak) {
-			t.Errorf("tx --help leaks M5 command %q:\n%s", leak, stdout)
-		}
+	// `abandon` is an out-of-scope forward-path command — it must NOT appear.
+	if strings.Contains(stdout, "abandon") {
+		t.Errorf("tx --help leaks the out-of-scope `abandon` command:\n%s", stdout)
 	}
 }
 

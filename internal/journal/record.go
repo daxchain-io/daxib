@@ -107,6 +107,13 @@ type Record struct {
 	// reached `broadcast` ⇒ commit the reservation; still `signed`/absent ⇒ release).
 	// Omitted (and zero on M4 records) when no policy is active.
 	ReservationID string `json:"reservation_id,omitempty"`
+	// ReplacesID / ReplacedByID are the RBF (BIP-125) linkage. On a `tx speedup`/`tx
+	// cancel` replacement record, ReplacesID is the ORIGINAL record's id; on the
+	// original (now StatusReplaced) record, ReplacedByID is the replacement's id. Both
+	// are omitempty so a non-RBF record's wire shape is unchanged (recordVersion stays
+	// 1, schema-stable), and a shallow clone/fold copies the strings safely.
+	ReplacesID   string `json:"replaces_id,omitempty"`
+	ReplacedByID string `json:"replaced_by_id,omitempty"`
 }
 
 // recordVersion is the current schema version stamped into Record.V on append.

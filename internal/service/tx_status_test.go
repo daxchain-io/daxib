@@ -282,3 +282,38 @@ func fastPoll() func() {
 	waitPollInterval = 2 * time.Millisecond
 	return func() { waitPollInterval = orig }
 }
+
+// TestRecordResultAdoptsShrinkingConfirmations is the CB-8 regression: when a
+// confirmed record's backend depth SHRINKS (a chain reorg), recordResult must adopt
+// the current (lower) depth, not retain the stale higher count; and a record the
+// backend now reports as fully unconfirmed (0/0) is demoted to pending.
+func TestRecordResultAdoptsShrinkingConfirmations(t *testing.T) {
+	svc := &Service{net: domain.NetworkMainnet}
+
+	rec := &journal.Record{
+		Status:        journal.StatusConfirmed,
+		Txid:          "ab",
+		Confirmations: 6,
+		BlockHeight:   800000,
+	}
+
+	// Reorg: the tx is still confirmed but only 2-deep now. The result must show 2,
+	// not the stale 6.
+	res := svc.recordResult(rec, domain.TxStatus{Txid: "ab", Confirmed: true, Confirmations: 2, BlockHeight: 800004})
+	if res.Confirmations != 2 {
+		t.Errorf("confirmations=%d, want 2 (must adopt the shrunken backend depth, CB-8)", res.Confirmations)
+	}
+	if res.Status != domain.TxStateConfirmed {
+		t.Errorf("status=%q, want confirmed (still >= 1 conf)", res.Status)
+	}
+
+	// Deeper reorg: the tx dropped back to the mempool (0/0/unconfirmed). Demote to
+	// pending and zero the stale depth.
+	res2 := svc.recordResult(rec, domain.TxStatus{Txid: "ab", Confirmed: false, Confirmations: 0, BlockHeight: 0})
+	if res2.Status != domain.TxStatePending {
+		t.Errorf("status=%q, want pending (reorg dropped it to the mempool, CB-8)", res2.Status)
+	}
+	if res2.Confirmations != 0 || res2.BlockHeight != 0 {
+		t.Errorf("stale depth retained after reorg: confs=%d height=%d", res2.Confirmations, res2.BlockHeight)
+	}
+}
