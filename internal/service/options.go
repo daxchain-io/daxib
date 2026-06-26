@@ -1,8 +1,11 @@
 package service
 
 import (
+	"context"
 	"io"
 	"time"
+
+	"github.com/daxchain-io/daxib/internal/backend"
 )
 
 // Options is what service.Open consumes. The cli frontend builds it from
@@ -11,11 +14,19 @@ import (
 type Options struct {
 	// Keystore is the keystore directory ($DAXIB_KEYSTORE / --keystore).
 	Keystore string
+	// Config is the config DIRECTORY ($DAXIB_CONFIG / --config), the config state
+	// class — the store reads/writes <Config>/config.toml inside it (and, on the
+	// forward path, the sealed policy anchor). Empty disables config-backed backend
+	// selection.
+	Config string
 	// Network is the active network name (mainnet/testnet/signet/regtest); ""
 	// defaults to mainnet.
 	Network string
 	// Wallet is the active-wallet override (--wallet > DAXIB_WALLET).
 	Wallet string
+	// Backend is the active-backend override (--backend > DAXIB_BACKEND); ""
+	// falls back to the network's configured default.
+	Backend string
 	// KDFLight forces the test scrypt cost on FIRST INIT only (DAXIB_KDF_LIGHT=1).
 	KDFLight bool
 
@@ -24,6 +35,10 @@ type Options struct {
 	// Secret carries the host primitives the §3.6 resolver needs (stdin, env
 	// lookup, TTY detection, the terminal prompt).
 	Secret SecretIO
+
+	// Dial overrides the backend dialer (tests inject a fake; production leaves it
+	// nil to use backend.Dial). It receives the fully-resolved backend.Options.
+	Dial func(ctx context.Context, o backend.Options) (backend.Client, error)
 }
 
 // SecretIO bundles the host primitives the secret resolver needs. The cli

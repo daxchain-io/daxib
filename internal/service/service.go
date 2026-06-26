@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/daxchain-io/daxib/internal/backend"
+	"github.com/daxchain-io/daxib/internal/config"
 	"github.com/daxchain-io/daxib/internal/domain"
 	"github.com/daxchain-io/daxib/internal/keys"
 )
@@ -13,12 +15,15 @@ import (
 // acquisition wiring; later milestones add the backend provider, coin selection,
 // the tx/PSBT pipeline, and the sealed-policy engine (docs/PLAN.md §8).
 type Service struct {
-	opts   Options
-	keys   *keys.Store
-	clock  func() time.Time
-	secret SecretIO
-	wallet string         // active-wallet override (--wallet > DAXIB_WALLET)
-	net    domain.Network // active network (validated)
+	opts    Options
+	keys    *keys.Store
+	cfg     *config.Store // backend endpoint config store (nil when no --config path)
+	clock   func() time.Time
+	secret  SecretIO
+	wallet  string         // active-wallet override (--wallet > DAXIB_WALLET)
+	backend string         // active-backend override (--backend > DAXIB_BACKEND)
+	net     domain.Network // active network (validated)
+	dial    func(ctx context.Context, o backend.Options) (backend.Client, error)
 }
 
 // Open builds a Service from Options. The keystore is opened eagerly (keys.Open
@@ -44,13 +49,33 @@ func Open(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	// The config store is optional: a missing --config path simply means no
+	// config-backed backend selection (backend/balance then report
+	// backend.not_configured). A non-empty path opens lazily (the file need not
+	// exist yet).
+	var cfg *config.Store
+	if opts.Config != "" {
+		cfg, err = config.Open(opts.Config)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	dial := opts.Dial
+	if dial == nil {
+		dial = backend.Dial
+	}
+
 	return &Service{
-		opts:   opts,
-		keys:   ks,
-		clock:  clock,
-		secret: opts.Secret,
-		wallet: opts.Wallet,
-		net:    net,
+		opts:    opts,
+		keys:    ks,
+		cfg:     cfg,
+		clock:   clock,
+		secret:  opts.Secret,
+		wallet:  opts.Wallet,
+		backend: opts.Backend,
+		net:     net,
+		dial:    dial,
 	}, nil
 }
 

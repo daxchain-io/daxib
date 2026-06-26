@@ -122,6 +122,14 @@ func AsError(err error) *Error {
 const (
 	CodeInternal = "internal"
 	CodeUsage    = "usage" // family prefix; specific: usage.<reason>
+	// Backend (chain-read provider) codes — exit 6 NETWORK for the live-but-failing
+	// classes, exit 10 NOT_FOUND for the missing-config classes. They are the
+	// stable spellings the backend provider + service emit (docs/PLAN.md §6).
+	CodeBackendUnreachable   = "backend.unreachable"    // dial/transport failure (exit 6)
+	CodeBackendRPCError      = "backend.rpc_error"      // answered with an error (exit 6)
+	CodeBackendNotFound      = "backend.not_found"      // no endpoint by that name (exit 10)
+	CodeBackendNotConfigured = "backend.not_configured" // no backend (and no default) for the network (exit 10)
+	CodeBackendExists        = "backend.exists"         // duplicate endpoint name on add (exit 2)
 	// CodeMnemonicRequired is the usage-class code for a missing BIP-39 mnemonic
 	// input (no --mnemonic-stdin/--mnemonic-file, no TTY). It is distinct from the
 	// keystore-passphrase auth class so the missing-secret error is label-aware
@@ -155,6 +163,10 @@ var codeExit = map[string]ExitCode{
 	"mnemonic.required": ExitUsage,
 	// A wallet with that name already exists in the keystore.
 	"wallet.exists": ExitUsage,
+	// A backend endpoint with that name already exists in the config.
+	"backend.exists": ExitUsage,
+	// The config file is malformed TOML or carries a bad value.
+	"config.invalid": ExitUsage,
 
 	// 3 — POLICY_DENIED (covers all policy.denied.* via the prefix rule:
 	// spend limit, destination allowlist, protected-UTXO refusal, coin-control).
@@ -163,6 +175,9 @@ var codeExit = map[string]ExitCode{
 	// 4 — AUTH (the "wrong/MISSING/unusable keystore passphrase" class)
 	"keystore.bad_passphrase":      ExitAuth,
 	"keystore.passphrase_required": ExitAuth, // missing passphrase, no TTY — distinct exit, never a prompt hang
+	// A ${env:}/${file:} secret reference (e.g. a backend rpcpassword) could not be
+	// resolved at dial time — a missing/unusable credential, an auth-class failure.
+	"secret.unresolved": ExitAuth,
 
 	// 5 — INSUFFICIENT_FUNDS (coin-selection / insufficient-confirmed lane)
 	"funds.insufficient":           ExitInsufficientFunds,
@@ -170,7 +185,8 @@ var codeExit = map[string]ExitCode{
 	"coin.selection_failed":        ExitInsufficientFunds, // BnB/knapsack could not assemble the spend
 
 	// 6 — NETWORK (the bitcoind RPC / Electrum / Esplora backend)
-	"backend.unreachable": ExitNetwork,
+	"backend.unreachable": ExitNetwork, // dial/transport failure: nothing listening, 5xx, timeout
+	"backend.rpc_error":   ExitNetwork, // the backend answered but with an error (bad JSON-RPC, 4xx REST)
 
 	// 7 — FEE_POLICY_DENIED (anti-fee-burn: the computed fee/fee-rate exceeds the cap)
 	"policy.fee_cap": ExitFeePolicyDenied,
@@ -190,12 +206,14 @@ var codeExit = map[string]ExitCode{
 	"tx.replacement_rejected": ExitTxConflict,
 
 	// 10 — NOT_FOUND / READONLY
-	"ref.not_found":      ExitNotFound,
-	"config.read_only":   ExitNotFound,
-	"config.not_found":   ExitNotFound,
-	"keystore.read_only": ExitNotFound,
-	"keystore.not_found": ExitNotFound, // the keystore directory is uninitialized
-	"wallet.not_found":   ExitNotFound, // unknown wallet name/uuid
+	"ref.not_found":          ExitNotFound,
+	"config.read_only":       ExitNotFound,
+	"config.not_found":       ExitNotFound,
+	"backend.not_found":      ExitNotFound, // no backend endpoint by that name
+	"backend.not_configured": ExitNotFound, // no backend (and no default) for the active network
+	"keystore.read_only":     ExitNotFound,
+	"keystore.not_found":     ExitNotFound, // the keystore directory is uninitialized
+	"wallet.not_found":       ExitNotFound, // unknown wallet name/uuid
 
 	// 11 — STATE
 	"state.lock_timeout": ExitState,
@@ -238,6 +256,7 @@ func ExitOf(code string) ExitCode {
 // per-error overrides are still possible by setting Error.Retryable directly.
 var retryableDefaults = map[string]bool{
 	"backend.unreachable":     true, // retry later
+	"backend.rpc_error":       true, // a transient backend error may clear on retry
 	"tx.wait_timeout":         true, // keep waiting / re-poll
 	"receive.timeout":         true,
 	"tx.replaced":             true, // re-quote / replace

@@ -7,6 +7,7 @@ require (
 	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/gofrs/flock v0.13.0
 	github.com/google/uuid v1.6.0
+	github.com/pelletier/go-toml/v2 v2.4.0
 	github.com/spf13/cobra v1.10.2
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/crypto v0.47.0

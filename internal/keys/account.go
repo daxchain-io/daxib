@@ -113,6 +113,53 @@ func (s *Store) ListAddresses(ctx context.Context, walletName string) (domain.Ne
 	return network, out, nil
 }
 
+// ScanAddress is one address in a wallet's gap-window scan set, returned by
+// ScanAddresses for the balance/utxo backend query.
+type ScanAddress struct {
+	Branch  domain.Branch
+	Index   uint32
+	Address string
+}
+
+// ScanAddresses derives the set of addresses to query for a balance/utxo scan: on
+// each branch, indices [0, next_<branch> + gap) derived from the wallet's stored
+// neutered xpub (NO passphrase, §3.5). This covers every already-handed-out
+// address plus a forward gap window so a balance still finds coins on addresses
+// the wallet generated but has not yet "used" via `address new`. It is a lock-free
+// read. A gap < 1 is clamped to 1.
+func (s *Store) ScanAddresses(ctx context.Context, walletName string, gap uint32) (domain.Network, []ScanAddress, error) {
+	if gap < 1 {
+		gap = 1
+	}
+	meta, err := s.loadMeta()
+	if err != nil {
+		return "", nil, err
+	}
+	_, w, ok := meta.findWalletByName(walletName)
+	if !ok {
+		return "", nil, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	}
+	network := domain.Network(w.Network)
+
+	out := make([]ScanAddress, 0, w.NextReceive+w.NextChange+2*gap)
+	for _, b := range []struct {
+		branch domain.Branch
+		count  uint32
+	}{
+		{domain.BranchReceive, w.NextReceive + gap},
+		{domain.BranchChange, w.NextChange + gap},
+	} {
+		for i := uint32(0); i < b.count; i++ {
+			addr, derr := addressFromAccountXpub(w.AccountXpub, network, b.branch, i)
+			if derr != nil {
+				return "", nil, derr
+			}
+			out = append(out, ScanAddress{Branch: b.branch, Index: i, Address: addr})
+		}
+	}
+	return network, out, nil
+}
+
 // DefaultWallet returns the keystore's default wallet name (meta default_wallet),
 // or "" when none is set.
 func (s *Store) DefaultWallet(ctx context.Context) (string, bool) {

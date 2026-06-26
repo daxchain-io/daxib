@@ -51,7 +51,7 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	pf.BoolVar(&rs.flags.Quiet, "quiet", false, "suppress non-essential human output")
 	pf.StringVar(&rs.flags.Network, "network", "", "Bitcoin network (mainnet/testnet/signet/regtest); overrides the configured default")
 	pf.StringVar(&rs.flags.Backend, "backend", "", "backend endpoint name (bitcoind RPC / Electrum / Esplora); overrides the network's default for this call")
-	pf.StringVar(&rs.flags.Config, "config", "", "config file or directory (default: platform XDG path)")
+	pf.StringVar(&rs.flags.Config, "config", "", "config directory holding config.toml (default: platform XDG path)")
 	pf.StringVar(&rs.flags.Keystore, "keystore", "", "keystore directory (default: platform data path)")
 	pf.StringVar(&rs.flags.StateDir, "state-dir", "", "mutable state directory (default: platform state path)")
 	pf.BoolVarP(&rs.flags.Yes, "yes", "y", false, "skip confirmations; required for mutating ops when non-interactive")
@@ -60,8 +60,11 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newVersionCmd(rs),      // M1
 		newWalletCmd(ctx, rs),  // M2: keys + HD wallet
 		newAddressCmd(ctx, rs), // M2: BIP-84 address derivation
-		// descriptor/balance/utxo/tx/psbt/fee/receive/policy/mcp land in later
-		// milestones (docs/PLAN.md §4, §8).
+		newBackendCmd(ctx, rs), // M3: backend provider (bitcoind RPC / Esplora)
+		newBalanceCmd(ctx, rs), // M3: UTXO-derived balance
+		newUTXOCmd(ctx, rs),    // M3: utxo list
+		// descriptor/tx/psbt/fee/receive/policy/mcp land in later milestones
+		// (docs/PLAN.md §4, §8).
 	)
 
 	return root

@@ -51,12 +51,33 @@ func buildServiceOptions(rs *rootState) service.Options {
 		}
 	}
 
+	// --config / DAXIB_CONFIG denote the config DIRECTORY (the config state class),
+	// not a file — the service joins config.toml inside it. This mirrors daxie's
+	// DAXIE_CONFIG ConfigDir contract (the var is semver-protected).
+	configDir := rs.flags.Config
+	if configDir == "" {
+		if v, ok := os.LookupEnv("DAXIB_CONFIG"); ok && v != "" {
+			configDir = v
+		} else {
+			configDir = defaultConfigDir()
+		}
+	}
+
+	bk := rs.flags.Backend
+	if bk == "" {
+		if v, ok := os.LookupEnv("DAXIB_BACKEND"); ok && v != "" {
+			bk = v
+		}
+	}
+
 	_, light := os.LookupEnv("DAXIB_KDF_LIGHT")
 
 	return service.Options{
 		Keystore: keystore,
+		Config:   configDir,
 		Network:  network,
 		Wallet:   wallet,
+		Backend:  bk,
 		KDFLight: light,
 		Clock:    time.Now,
 		Secret: service.SecretIO{
