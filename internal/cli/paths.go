@@ -20,6 +20,21 @@ func defaultKeystoreDir() string {
 	return filepath.Join(".daxib", "keystore")
 }
 
+// defaultStateDir returns the OS-appropriate default mutable-state DIRECTORY (the
+// state class holding the tx journal + send/journal locks) when neither
+// --state-dir nor DAXIB_STATE_DIR is set. It mirrors the keystore/config layout —
+// a "daxib/state" subpath under the platform data dir — with a best-effort
+// "./.daxib/state" fallback.
+func defaultStateDir() string {
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "daxib", "state")
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".daxib", "state")
+	}
+	return filepath.Join(".daxib", "state")
+}
+
 // defaultConfigDir returns the OS-appropriate default config DIRECTORY (the config
 // state class) when neither --config nor DAXIB_CONFIG is set. It mirrors daxie's
 // ConfigDir: the directory holds config.toml today and, on the forward path, the

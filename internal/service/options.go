@@ -19,6 +19,11 @@ type Options struct {
 	// forward path, the sealed policy anchor). Empty disables config-backed backend
 	// selection.
 	Config string
+	// State is the mutable state DIRECTORY ($DAXIB_STATE_DIR / --state-dir), the
+	// state class that holds the tx journal (<State>/journal/<network>.jsonl) and
+	// the send/journal locks (<State>/locks). Empty defaults to <data-dir>/state via
+	// stateDir(); the journal opens lazily (no dirs until the first send).
+	State string
 	// Network is the active network name (mainnet/testnet/signet/regtest); ""
 	// defaults to mainnet.
 	Network string

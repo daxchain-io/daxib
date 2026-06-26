@@ -93,8 +93,50 @@ linters:
             - pkg: github.com/daxchain-io/daxib/internal
               desc: "domain imports nothing internal (it is the wire contract)"
 
+        # ── coinselect is a pure-value provider leaf (domain + stdlib + btcec) ──
+        # It never imports the core/other-providers. Its production code must also
+        # never import btcd/blockchain or btcd/mempool (those drag the validation/
+        # chainstate tree in and threaten the offline CGO0+windows build); the
+        # vsize/dust cross-checks against those packages live in _test.go ONLY,
+        # which the exclusions block below exempts from the heavy-btcd deny.
+        coinselect:
+          files:
+            - "**/internal/coinselect/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/service
+              desc: "coinselect is a provider leaf — never the core"
+            - pkg: github.com/daxchain-io/daxib/internal/backend
+              desc: "coinselect is a pure-value leaf — no backend"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "coinselect is a pure-value leaf — no keys"
+            - pkg: github.com/btcsuite/btcd/blockchain
+              desc: "coinselect production code must not import btcd/blockchain (offline-safe build); the vsize cross-check is _test.go only"
+            - pkg: github.com/btcsuite/btcd/mempool
+              desc: "coinselect production code must not import btcd/mempool (offline-safe build); the dust cross-check is _test.go only"
+
+        # ── journal is a state provider leaf: domain + fsx (+ stdlib) ONLY ──
+        journal:
+          files:
+            - "**/internal/journal/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/service
+              desc: "journal is a provider leaf — never the core"
+            - pkg: github.com/daxchain-io/daxib/internal/backend
+              desc: "journal imports domain + fsx only — not backend"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "journal imports domain + fsx only — not keys"
+            - pkg: github.com/daxchain-io/daxib/internal/config
+              desc: "journal imports domain + fsx only — not config"
+
   exclusions:
     rules:
+      # The coinselect vsize/dust cross-check tests intentionally import
+      # btcd/blockchain + btcd/mempool to PIN the inlined constants to btcd's own
+      # weight/dust math (the whole point of the pin). Production code never does;
+      # exempt the test files from the depguard heavy-btcd deny.
+      - path: internal/coinselect/.*_test\.go
+        linters:
+          - depguard
       # Test fixtures may use patterns gosec flags (temp files, fixed creds, etc.).
       - path: _test\.go
         linters:

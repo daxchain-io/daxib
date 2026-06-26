@@ -84,6 +84,42 @@ func (s *Store) DeriveNext(ctx context.Context, walletName string, branch domain
 	return out, nil
 }
 
+// PeekNext derives the address at the next unused index on the requested branch
+// WITHOUT recording it or advancing the watermark (a read-only preview, §3.5: from
+// the neutered xpub, no passphrase). It is used by `tx send --dry-run` so a no-op
+// preview never burns a change index / pollutes meta. The address it returns is
+// exactly what a subsequent DeriveNext on the same branch would allocate.
+func (s *Store) PeekNext(ctx context.Context, walletName string, branch domain.Branch) (DerivedAddress, error) {
+	meta, err := s.loadMeta()
+	if err != nil {
+		return DerivedAddress{}, err
+	}
+	_, w, ok := meta.findWalletByName(walletName)
+	if !ok {
+		return DerivedAddress{}, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	}
+	network := domain.Network(w.Network)
+
+	var index uint32
+	if branch == domain.BranchChange {
+		index = w.NextChange
+	} else {
+		index = w.NextReceive
+	}
+	addr, err := addressFromAccountXpub(w.AccountXpub, network, branch, index)
+	if err != nil {
+		return DerivedAddress{}, err
+	}
+	return DerivedAddress{
+		Wallet:  walletName,
+		Network: network,
+		Branch:  branch,
+		Index:   index,
+		Address: addr,
+		Path:    fullPath(network, branch, index),
+	}, nil
+}
+
 // ListAddresses returns every materialized address for a wallet, sorted by
 // (branch, index). Lock-free read; no passphrase.
 func (s *Store) ListAddresses(ctx context.Context, walletName string) (domain.Network, []AddressInfo, error) {

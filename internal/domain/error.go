@@ -136,6 +136,25 @@ const (
 	// (§3.6): the mnemonic has no env channel, and a missing input is a usage (exit
 	// 2) failure, not an auth (exit 4) one.
 	CodeMnemonicRequired = "mnemonic.required"
+
+	// M4 tx-send codes (the transaction pipeline). The funds.* / coin.* / tx.* /
+	// state.* spellings the send pipeline, journal, and tx status/wait emit.
+	// usage.* sub-codes carry the send-input failures.
+	CodeUsageBadAmount       = "usage.bad_amount"            // malformed/over-cap/negative --amount (exit 2)
+	CodeUsageBadAddress      = "usage.bad_address"           // --to does not decode for the active network (exit 2)
+	CodeUsageBadFeeRate      = "usage.bad_fee_rate"          // --fee-rate is not a positive integer sat/vB (exit 2)
+	CodeUsageBadTimeout      = "usage.bad_timeout"           // --timeout is not a valid duration (exit 2)
+	CodeUsageDustOutput      = "usage.dust_output"           // recipient amount below the P2WPKH dust threshold (exit 2)
+	CodeUsageConfirmRequired = "usage.confirmation_required" // mutating send, no TTY, no --yes (exit 2)
+	CodeFundsInsufficient    = "funds.insufficient"          // spendable < amount+fee (exit 5)
+	CodeCoinSelectionFailed  = "coin.selection_failed"       // BnB/knapsack could not assemble the spend (exit 5)
+	CodeTxBroadcastRejected  = "tx.broadcast_rejected"       // a permanent network reject (exit 6)
+	CodeTxFeeTooLow          = "tx.fee_too_low"              //nolint:gosec // G101: dotted error-code string // min-relay/mempool-min reject (exit 6)
+	CodeTxInputSpent         = "tx.input_spent"              // bad-txns-inputs-missingorspent (exit 9, retryable: re-select)
+	CodeTxWaitTimeout        = "tx.wait_timeout"             // a --wait deadline hit with the tx still pending (exit 8, retryable)
+	CodeStateLockTimeout     = "state.lock_timeout"          // flock contention (exit 11)
+	CodeStateCorrupt         = "state.corrupt"               // unrecoverable state file (exit 11)
+	CodeRefNotFound          = "ref.not_found"               // unknown txid/wallet (exit 10)
 )
 
 // codeExit is the (prefix -> exit) registry, highest-specificity wins. The key
@@ -167,6 +186,17 @@ var codeExit = map[string]ExitCode{
 	"backend.exists": ExitUsage,
 	// The config file is malformed TOML or carries a bad value.
 	"config.invalid": ExitUsage,
+	// M4 tx-send usage failures (all under the usage prefix → exit 2, but spelled
+	// out so each is greppable and a future per-code retryable/message tweak is
+	// local). A malformed --amount, an --to that does not decode for the active
+	// network, a non-positive --fee-rate, a bad --timeout, a recipient output below
+	// the dust threshold, and the non-TTY-without---yes confirmation gate.
+	"usage.bad_amount":            ExitUsage,
+	"usage.bad_address":           ExitUsage,
+	"usage.bad_fee_rate":          ExitUsage,
+	"usage.bad_timeout":           ExitUsage,
+	"usage.dust_output":           ExitUsage,
+	"usage.confirmation_required": ExitUsage,
 
 	// 3 — POLICY_DENIED (covers all policy.denied.* via the prefix rule:
 	// spend limit, destination allowlist, protected-UTXO refusal, coin-control).
@@ -187,6 +217,14 @@ var codeExit = map[string]ExitCode{
 	// 6 — NETWORK (the bitcoind RPC / Electrum / Esplora backend)
 	"backend.unreachable": ExitNetwork, // dial/transport failure: nothing listening, 5xx, timeout
 	"backend.rpc_error":   ExitNetwork, // the backend answered but with an error (bad JSON-RPC, 4xx REST)
+	// A signed tx the network PERMANENTLY rejected (dust output, bad scriptpubkey,
+	// non-final, non-mandatory-script-verify). The journal record is terminalized
+	// `failed`; this is NOT a re-broadcast-the-same-bytes class (exit 6).
+	"tx.broadcast_rejected": ExitNetwork,
+	"tx.rejected":           ExitNetwork,
+	// A reject for a fee below the min-relay / mempool-min floor — the operator can
+	// retry with a higher --fee-rate (exit 6).
+	"tx.fee_too_low": ExitNetwork,
 
 	// 7 — FEE_POLICY_DENIED (anti-fee-burn: the computed fee/fee-rate exceeds the cap)
 	"policy.fee_cap": ExitFeePolicyDenied,
@@ -261,6 +299,7 @@ var retryableDefaults = map[string]bool{
 	"receive.timeout":         true,
 	"tx.replaced":             true, // re-quote / replace
 	"tx.input_spent":          true, // re-select coins and rebuild
+	"tx.fee_too_low":          true, // the fee market moves; a higher --fee-rate may clear it
 	"state.lock_timeout":      true, // contention; retry
 	"policy.denied.day_limit": true, // rolling-24h window ages out; the engine returns retry_after
 	"policy.fee_cap":          true, // the fee market moves; a later estimate may clear the cap

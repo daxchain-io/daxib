@@ -70,11 +70,23 @@ func buildServiceOptions(rs *rootState) service.Options {
 		}
 	}
 
+	// --state-dir > DAXIB_STATE_DIR > <data>/state (resolved in the service from the
+	// keystore parent when empty). The state dir holds the tx journal + send locks.
+	stateDir := rs.flags.StateDir
+	if stateDir == "" {
+		if v, ok := os.LookupEnv("DAXIB_STATE_DIR"); ok && v != "" {
+			stateDir = v
+		} else {
+			stateDir = defaultStateDir()
+		}
+	}
+
 	_, light := os.LookupEnv("DAXIB_KDF_LIGHT")
 
 	return service.Options{
 		Keystore: keystore,
 		Config:   configDir,
+		State:    stateDir,
 		Network:  network,
 		Wallet:   wallet,
 		Backend:  bk,

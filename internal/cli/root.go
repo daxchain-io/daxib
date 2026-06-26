@@ -63,7 +63,9 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newBackendCmd(ctx, rs), // M3: backend provider (bitcoind RPC / Esplora)
 		newBalanceCmd(ctx, rs), // M3: UTXO-derived balance
 		newUTXOCmd(ctx, rs),    // M3: utxo list
-		// descriptor/tx/psbt/fee/receive/policy/mcp land in later milestones
+		newTxCmd(ctx, rs),      // M4: tx send/status/wait/list (the send pipeline)
+		newFeeCmd(ctx, rs),     // M4: fee estimates + recommendation
+		// descriptor/psbt/receive/policy/mcp land in later milestones
 		// (docs/PLAN.md §4, §8).
 	)
 

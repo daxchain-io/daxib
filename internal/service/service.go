@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/daxchain-io/daxib/internal/backend"
 	"github.com/daxchain-io/daxib/internal/config"
 	"github.com/daxchain-io/daxib/internal/domain"
+	"github.com/daxchain-io/daxib/internal/journal"
 	"github.com/daxchain-io/daxib/internal/keys"
 )
 
@@ -24,6 +26,9 @@ type Service struct {
 	backend string         // active-backend override (--backend > DAXIB_BACKEND)
 	net     domain.Network // active network (validated)
 	dial    func(ctx context.Context, o backend.Options) (backend.Client, error)
+
+	journal  *journal.Store // the tx journal (state class); nil only if Open failed to bind it
+	stateDir string         // resolved mutable state directory (<data>/state by default)
 }
 
 // Open builds a Service from Options. The keystore is opened eagerly (keys.Open
@@ -66,21 +71,57 @@ func Open(ctx context.Context, opts Options) (*Service, error) {
 		dial = backend.Dial
 	}
 
-	return &Service{
-		opts:    opts,
-		keys:    ks,
-		cfg:     cfg,
-		clock:   clock,
-		secret:  opts.Secret,
-		wallet:  opts.Wallet,
-		backend: opts.Backend,
-		net:     net,
-		dial:    dial,
-	}, nil
+	// The tx journal (state class) opens lazily: it creates no dirs until the first
+	// send, so a read-only/uninitialized state dir is fine for non-send commands. A
+	// resolved state dir is always available (defaults to <data>/state).
+	sd := stateDir(opts)
+	j, err := journal.Open(sd, clock)
+	if err != nil {
+		return nil, err
+	}
+
+	svc := &Service{
+		opts:     opts,
+		keys:     ks,
+		cfg:      cfg,
+		clock:    clock,
+		secret:   opts.Secret,
+		wallet:   opts.Wallet,
+		backend:  opts.Backend,
+		net:      net,
+		dial:     dial,
+		journal:  j,
+		stateDir: sd,
+	}
+
+	// Best-effort reconcile at open (never fails Open): leaves `signed` records for
+	// lazy rebroadcast under the next send-lock / tx wait, and may opportunistically
+	// promote a `broadcast` record to confirmed. It performs NO destructive action
+	// offline.
+	svc.reconcileAtOpen(ctx)
+
+	return svc, nil
 }
 
-// Close releases the keystore.
+// stateDir resolves the mutable state directory: an explicit Options.State, else
+// <keystore-parent>/state (so a daxib install keeps keystore/config/state as
+// siblings under one data root). When even the keystore dir is empty it falls back
+// to "./.daxib/state".
+func stateDir(opts Options) string {
+	if opts.State != "" {
+		return opts.State
+	}
+	if opts.Keystore != "" {
+		return filepath.Join(filepath.Dir(opts.Keystore), "state")
+	}
+	return filepath.Join(".daxib", "state")
+}
+
+// Close releases the keystore (and the journal, a no-op flush kept for symmetry).
 func (s *Service) Close() error {
+	if s.journal != nil {
+		_ = s.journal.Close()
+	}
 	if s.keys != nil {
 		return s.keys.Close()
 	}
