@@ -27,8 +27,6 @@ type rootState struct {
 // set so the central registry in render.go owns all error→exit mapping; Cobra
 // never prints an error itself.
 func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
-	_ = ctx // reserved: later commands thread ctx into their RunE via the service.
-
 	root := &cobra.Command{
 		Use:   "daxib",
 		Short: "Daxib — the Bitcoin wallet for AI",
@@ -39,7 +37,8 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		// Cobra's default completion command would shadow our future explicit one;
 		// disable the built-in so the documented surface stays exact.
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
-		// No Run on the root: bare `daxib` prints help and exits non-zero usage.
+		// No Run on the root: bare `daxib` prints help and exits 0 (cmd.Help returns
+		// nil), matching daxie parity.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -58,9 +57,11 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	pf.BoolVarP(&rs.flags.Yes, "yes", "y", false, "skip confirmations; required for mutating ops when non-interactive")
 
 	root.AddCommand(
-		newVersionCmd(rs), // M1
-		// wallet/descriptor/address/balance/utxo/tx/psbt/fee/receive/policy/mcp
-		// land in later milestones (docs/PLAN.md §4, §8).
+		newVersionCmd(rs),      // M1
+		newWalletCmd(ctx, rs),  // M2: keys + HD wallet
+		newAddressCmd(ctx, rs), // M2: BIP-84 address derivation
+		// descriptor/balance/utxo/tx/psbt/fee/receive/policy/mcp land in later
+		// milestones (docs/PLAN.md §4, §8).
 	)
 
 	return root

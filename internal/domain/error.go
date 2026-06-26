@@ -122,6 +122,12 @@ func AsError(err error) *Error {
 const (
 	CodeInternal = "internal"
 	CodeUsage    = "usage" // family prefix; specific: usage.<reason>
+	// CodeMnemonicRequired is the usage-class code for a missing BIP-39 mnemonic
+	// input (no --mnemonic-stdin/--mnemonic-file, no TTY). It is distinct from the
+	// keystore-passphrase auth class so the missing-secret error is label-aware
+	// (§3.6): the mnemonic has no env channel, and a missing input is a usage (exit
+	// 2) failure, not an auth (exit 4) one.
+	CodeMnemonicRequired = "mnemonic.required"
 )
 
 // codeExit is the (prefix -> exit) registry, highest-specificity wins. The key
@@ -137,6 +143,18 @@ var codeExit = map[string]ExitCode{
 
 	// 2 — USAGE
 	"usage": ExitUsage,
+	// First-init passphrase confirmation is missing/mismatched and there is no
+	// TTY to double-enter at — a distinct, non-hanging usage failure (never a
+	// prompt hang). Keystore subsystem (M2 keys); see §3.3/§3.4.
+	"keystore.confirm_required": ExitUsage,
+	// A BIP-39 mnemonic failed checksum/wordlist validation on import.
+	"mnemonic.invalid": ExitUsage,
+	// A required BIP-39 mnemonic input was not supplied via --mnemonic-stdin /
+	// --mnemonic-file and stdin is not a TTY — a usage failure (the mnemonic has no
+	// env channel), distinct from the keystore-passphrase auth class.
+	"mnemonic.required": ExitUsage,
+	// A wallet with that name already exists in the keystore.
+	"wallet.exists": ExitUsage,
 
 	// 3 — POLICY_DENIED (covers all policy.denied.* via the prefix rule:
 	// spend limit, destination allowlist, protected-UTXO refusal, coin-control).
@@ -176,14 +194,17 @@ var codeExit = map[string]ExitCode{
 	"config.read_only":   ExitNotFound,
 	"config.not_found":   ExitNotFound,
 	"keystore.read_only": ExitNotFound,
+	"keystore.not_found": ExitNotFound, // the keystore directory is uninitialized
+	"wallet.not_found":   ExitNotFound, // unknown wallet name/uuid
 
 	// 11 — STATE
 	"state.lock_timeout": ExitState,
 	"state.corrupt":      ExitState,
 
 	// 12 — INTEGRITY (tamper/misconfig tripwires)
-	"backend.network_mismatch": ExitIntegrity, // backend genesis/network != declared network
-	"keystore.perms_insecure":  ExitIntegrity, // insecure keystore/secret file perms — a misconfig tripwire, not a daxib bug
+	"backend.network_mismatch":      ExitIntegrity, // backend genesis/network != declared network
+	"keystore.perms_insecure":       ExitIntegrity, // insecure keystore/secret file perms — a misconfig tripwire, not a daxib bug
+	"keystore.derivation_watermark": ExitIntegrity, // meta.json watermark is below a materialized index — a restore-coupling tripwire (§3.4)
 }
 
 // ExitOf maps a canonical code to its exit number using the longest-dotted-prefix
