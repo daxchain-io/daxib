@@ -32,6 +32,8 @@ func chainParams(n domain.Network) *chaincfg.Params {
 		return &chaincfg.MainNetParams
 	case domain.NetworkTestnet:
 		return &chaincfg.TestNet3Params
+	case domain.NetworkTestnet4:
+		return &chaincfg.TestNet4Params
 	case domain.NetworkSignet:
 		return &chaincfg.SigNetParams
 	case domain.NetworkRegtest:

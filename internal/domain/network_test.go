@@ -14,6 +14,7 @@ func TestParseNetwork(t *testing.T) {
 		{"", NetworkMainnet, false},
 		{"mainnet", NetworkMainnet, false},
 		{"testnet", NetworkTestnet, false},
+		{"testnet4", NetworkTestnet4, false},
 		{"signet", NetworkSignet, false},
 		{"regtest", NetworkRegtest, false},
 		{"bogus", "", true},
@@ -41,7 +42,7 @@ func TestCoinType(t *testing.T) {
 	if NetworkMainnet.CoinType() != 0 {
 		t.Errorf("mainnet coin type = %d, want 0", NetworkMainnet.CoinType())
 	}
-	for _, n := range []Network{NetworkTestnet, NetworkSignet, NetworkRegtest} {
+	for _, n := range []Network{NetworkTestnet, NetworkTestnet4, NetworkSignet, NetworkRegtest} {
 		if n.CoinType() != 1 {
 			t.Errorf("%s coin type = %d, want 1", n, n.CoinType())
 		}
