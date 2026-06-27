@@ -12,9 +12,12 @@ Daxib is the Bitcoin sibling of [**daxie**](https://github.com/daxchain-io/daxie
 on Bitcoin's UTXO model, and extended with three things Bitcoin gives us that Ethereum
 cannot.
 
-> **Status: planning / pre-alpha.** Nothing is built yet. The design is being mapped
-> in [docs/PLAN.md](docs/PLAN.md). The CLI surface, JSON schemas, and security model
-> below are *proposed*, not frozen.
+> **Status: alpha (heading to `v0.1.0`).** The v1 feature set is built and on `main`:
+> HD wallet, Core RPC + Esplora backends, the coin-select→sign→broadcast pipeline,
+> a sealed two-passphrase spend-limit policy, the MCP agent interface, and RBF —
+> validated end-to-end on real testnet. Interfaces may still change before the first
+> tagged release; use a testnet and a small mainnet float while evaluating. Design
+> reference: [docs/PLAN.md](docs/PLAN.md).
 
 ---
 

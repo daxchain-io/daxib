@@ -1,0 +1,133 @@
+# Release pipeline — tag-triggered, signed, brew-publishing.
+#
+#   verify ──► goreleaser (release env: human-approval gate)
+#
+# ── THE ARMING GUARD (inert until the operator opts in) ─────────────────────────
+# EVERY job carries
+#   if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+# DAXIB_RELEASE_ENABLED is a repo *variable* that does not exist yet → it evaluates
+# to false → the whole workflow is inert. Committing this file publishes NOTHING.
+# To arm the pipeline (one-time):
+#   1. Create the repo variable DAXIB_RELEASE_ENABLED = true.
+#   2. Create the `release` environment (optionally with required reviewers — the
+#      human-approval gate) and add the HOMEBREW_TAP_GITHUB_TOKEN secret to it
+#      (a fine-grained PAT with Contents:Read-and-Write on daxchain-io/homebrew-tap).
+#   3. Push a tag: `git tag v0.1.0 && git push origin v0.1.0`.
+# This workflow never tags/commits/pushes by itself.
+#
+# ── Supply-chain posture ────────────────────────────────────────────────────────
+#   - Default GITHUB_TOKEN is read-only (top-level permissions: contents: read);
+#     the one write job widens only what it needs.
+#   - contents/packages/id-token: write live ONLY on the goreleaser job
+#     (id-token:write = keyless cosign OIDC; packages:write = GHCR push).
+#   - HOMEBREW_TAP_GITHUB_TOKEN is scoped to the `release` environment, readable
+#     only by the gated goreleaser job.
+#   - All third-party actions are SHA-pinned (dependabot bumps them).
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.26"
+  GORELEASER_VERSION: "~> v2.16"
+
+jobs:
+  # ── verify ──────────────────────────────────────────────────────────────────
+  # Pre-publish gate: the unit suite (daxib's tests are all pure/httptest — no node
+  # needed), the goreleaser deprecation check, and a snapshot build that proves all
+  # six targets archive and the Homebrew cask renders before a human is asked to
+  # approve the publish.
+  verify:
+    name: verify (tests + snapshot build)
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0 # goreleaser reads tag history for the changelog
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: Unit tests
+        run: go test ./...
+      - uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          install-only: true
+      - name: goreleaser check (no deprecations)
+        run: |
+          set -euo pipefail
+          out="$(goreleaser check 2>&1)"; echo "$out"
+          echo "$out" | grep -iq 'deprecat' && { echo "::error::deprecated goreleaser stanza" >&2; exit 1; } || true
+      - name: Snapshot build (six targets + cask render)
+        # No publish, sign, or GHCR push — just prove the build/archive/cask-render
+        # path before the approval gate. CGO off (the shipped binaries are pure-Go).
+        env:
+          CGO_ENABLED: "0"
+        run: goreleaser release --snapshot --clean --skip=sign,docker,sbom,publish
+
+  # ── goreleaser ──────────────────────────────────────────────────────────────
+  # The ONE write job, behind the `release` environment (human-approval gate).
+  # Builds + cosign-signs (keyless OIDC) + pushes the GHCR image + creates the
+  # GitHub Release + pushes the Homebrew cask to daxchain-io/homebrew-tap.
+  goreleaser:
+    name: goreleaser (sign + GHCR + release + cask)
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    environment: release
+    permissions:
+      contents: write # create the GitHub Release + upload assets
+      packages: write # push the image to ghcr.io/daxchain-io/images/daxib
+      id-token: write # OIDC for cosign keyless signing (no key to steal)
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        with:
+          driver: docker-container
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run goreleaser
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The tap PAT (scoped to this `release` environment) lets the cask pipe
+          # push directly. DAXIB_CASK_SKIP_UPLOAD=false flips the goreleaser config's
+          # render-only default to publish — the cask's checksums come from THIS
+          # run's archives (the same bytes uploaded to the release), so a single run
+          # is self-consistent.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          DAXIB_CASK_SKIP_UPLOAD: "false"
