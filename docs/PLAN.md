@@ -43,7 +43,7 @@ Go with a built‑in MCP server. Its load‑bearing ideas, all of which we keep:
   **MCP server** (`internal/mcpserver`) are thin adapters. There is no second signing
   path to audit, and neither frontend can bypass the guardrails because the guardrails
   live *below* both, inside one signing chokepoint. Enforced by `internal/arch_test.go`
-  + the depguard linter, not by convention.
+  and the depguard linter, not by convention.
 - **Two passphrases, two privilege levels.** The **keystore passphrase** unlocks
   signing (the agent may hold it). The **admin passphrase** authorizes policy changes
   (the agent *never* holds it). A fully prompt‑hijacked agent can spend up to the
@@ -339,8 +339,8 @@ Mirrors daxie's shape; diffs called out. Every command ships a human form **and*
 | `backend` | `add` · `list` · `use` · `test` (bitcoind RPC / Electrum / Esplora) | replaces eth `rpc` |
 | `policy` | `show` · `set` · `allow` · `deny` · `verify` · `check` · `counters` · `pin` · `reset` · admin‑passphrase ops · **`fee-cap`** · **`coin-control`** · **`protect-assets`** | extended with BTC dims (`require-cosign` is forward-path, §5a) |
 | `mcp` | `serve` · `tools` | same |
-| _(forward path)_ `runes` / `inscription` | `list` · `show` · `send` | deferred (§7.4) — analog to token/nft |
-| _(forward path)_ `ln` | `pay` · `invoice` · `balance` · `l402` | Lightning module — deferred (§7.1) |
+| *(forward path)* `runes` / `inscription` | `list` · `show` · `send` | deferred (§7.4) — analog to token/nft |
+| *(forward path)* `ln` | `pay` · `invoice` · `balance` · `l402` | Lightning module — deferred (§7.1) |
 | utility | `version` · `completion` · `config` · `convert` (BTC/sat/fiat) | same |
 
 **Exit codes** — reuse daxie's `0`–`12` skeleton, repurposing the few EVM‑specific
@@ -429,7 +429,7 @@ Likely support both behind the interface; pick the default in §7.
 4. **Asset scope.** — **DECIDED: pure BTC for v1** (owner, 2026-06-24, revised).
    Runes / Ordinals / inscriptions are **deferred to the forward path** — Rune activity
    has cooled since its 2024 peak and it's a nice-to-have, not a v1 must. Get plain BTC
-   + the agent/MCP core solid first; add `runes` / `inscription` nouns (and the
+   - the agent/MCP core solid first; add `runes` / `inscription` nouns (and the
    asset-protection guardrail that comes with an ordinals index) later if demand is
    real.
 5. **Miniscript depth in v1.** — **DECIDED: not in v1** (follows from #2). Co-sign /

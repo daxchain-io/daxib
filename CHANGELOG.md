@@ -6,6 +6,24 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-27
+
+Build/release-pipeline parity with daxie. No change to the wallet itself.
+
+### Added
+
+- **`scripts/install.sh`** — a `curl | sh` installer (downloads + SHA256-verifies the
+  release archive, optional `cosign verify-blob`, installs to a prefix). Folded into
+  the release + `checksums.txt` so the one curl'd asset is self-verifying.
+- **`.github/workflows/ci-install-script.yml`** — shellcheck + a snapshot-based
+  install smoke (catches install.sh ↔ goreleaser drift before a release).
+- **`.github/workflows/static.yml`** — markdownlint / shellcheck / actionlint CI.
+- **`release.yml` hardening** to daxie parity: SLSA L3 **provenance**, a stable-only
+  **cask-publish** two-phase (render → normalize checksums → push to the tap, holding
+  the tap PAT off the build job), post-publish **install-smoke** (alpine/debian/ubuntu/
+  fedora + macOS + a cosign-verify variant), and **image-smoke** (GHCR pull + cosign
+  verify by digest). Plus the pre-approval asset-name + cosign-bundle gates in `verify`.
+
 ## [0.1.2] - 2026-06-27
 
 A release-pipeline verification cut — no functional, dependency, or format changes

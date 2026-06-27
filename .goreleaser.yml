@@ -71,6 +71,11 @@ archives:
 checksum:
   name_template: checksums.txt
   algorithm: sha256
+  # LOAD-BEARING: pull scripts/install.sh into checksums.txt so the cosign-signed
+  # checksum blob transitively covers the one script every `curl | sh` user
+  # executes. Without this, install.sh would be the only unsigned release asset.
+  extra_files:
+    - glob: scripts/install.sh
 
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
@@ -143,6 +148,12 @@ release:
   # (re-run the same tag to complete it). Once a release's artifacts are public +
   # Rekor-logged, every fix is a new patch tag.
   mode: replace
+  # Ship install.sh as a release asset so
+  # https://github.com/daxchain-io/daxib/releases/latest/download/install.sh always
+  # resolves to the script matching the latest stable release. Repo root is the
+  # module root, so this is a plain workdir-local glob.
+  extra_files:
+    - glob: scripts/install.sh
 
 # Homebrew distribution via homebrew_casks (NOT the deprecated brews: block).
 # Casks are macOS-only; go install / the GitHub release archives / the OCI image

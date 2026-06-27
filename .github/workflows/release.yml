@@ -1,28 +1,43 @@
-# Release pipeline — tag-triggered, signed, brew-publishing.
+# Release pipeline — the tag-triggered, signed, brew-publishing pipeline.
 #
-#   verify ──► goreleaser (release env: human-approval gate)
+# Job graph:
+#
+#   verify ──► goreleaser ──► provenance
+#              (env: release   ├─► cask-publish (stable-only)
+#               approval gate) └─► install-smoke / install-smoke-macos /
+#                                  install-smoke-cosign / image-smoke
 #
 # ── THE ARMING GUARD (inert until the operator opts in) ─────────────────────────
 # EVERY job carries
 #   if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
-# DAXIB_RELEASE_ENABLED is a repo *variable* that does not exist yet → it evaluates
-# to false → the whole workflow is inert. Committing this file publishes NOTHING.
-# To arm the pipeline (one-time):
+# DAXIB_RELEASE_ENABLED is a repo *variable*: if it does not exist it evaluates to
+# false → the whole workflow is inert. Committing this file publishes NOTHING. The
+# pipeline is validated locally via `goreleaser release --snapshot` and via
+# ci-install-script.yml; it NEVER fires a real release on its own. To arm it:
 #   1. Create the repo variable DAXIB_RELEASE_ENABLED = true.
 #   2. Create the `release` environment (optionally with required reviewers — the
 #      human-approval gate) and add the HOMEBREW_TAP_GITHUB_TOKEN secret to it
 #      (a fine-grained PAT with Contents:Read-and-Write on daxchain-io/homebrew-tap).
-#   3. Push a tag: `git tag v0.1.0 && git push origin v0.1.0`.
-# This workflow never tags/commits/pushes by itself.
+#   3. Push a tag: `git tag v1.0.0 && git push origin v1.0.0`.
+# This workflow does NOT tag/commit/push by itself.
 #
 # ── Supply-chain posture ────────────────────────────────────────────────────────
 #   - Default GITHUB_TOKEN is read-only (top-level permissions: contents: read);
-#     the one write job widens only what it needs.
-#   - contents/packages/id-token: write live ONLY on the goreleaser job
+#     each job widens ONLY what it needs.
+#   - contents/packages/id-token: write live on the SINGLE goreleaser job
 #     (id-token:write = keyless cosign OIDC; packages:write = GHCR push).
-#   - HOMEBREW_TAP_GITHUB_TOKEN is scoped to the `release` environment, readable
-#     only by the gated goreleaser job.
-#   - All third-party actions are SHA-pinned (dependabot bumps them).
+#   - HOMEBREW_TAP_GITHUB_TOKEN is referenced in EXACTLY ONE place: cask-publish.
+#   - The tag-ref hard-gate on every job means a future workflow_dispatch / PR
+#     trigger can never reach the PAT or the write scopes.
+#   - All third-party actions are SHA-pinned (dependabot bumps). The one
+#     documented exception is slsa-github-generator, which slsa-verifier requires
+#     be referenced by its semver tag, not a SHA.
+#
+# ── Fail-forward ────────────────────────────────────────────────────────────────
+# `mode: replace` (in .goreleaser.yml) is reserved for a release whose core
+# artifacts never finished publishing. Once core artifacts are public, every fix
+# is a follow-up patch tag — mutating a Rekor-logged signed release is a trust
+# smell.
 name: Release
 
 on:
@@ -30,6 +45,8 @@ on:
     tags:
       - "v*"
 
+# Least-privilege default: the implicit GITHUB_TOKEN is read-only. Jobs widen
+# only the exact scopes they need.
 permissions:
   contents: read
 
@@ -39,16 +56,21 @@ concurrency:
 
 env:
   GO_VERSION: "1.26"
+  # goreleaser action minor pinned (never bare "~> v2").
   GORELEASER_VERSION: "~> v2.16"
+  DAXIB_IMAGE_REPOSITORY: ghcr.io/daxchain-io/images/daxib
 
 jobs:
-  # ── verify ──────────────────────────────────────────────────────────────────
-  # Pre-publish gate: the unit suite (daxib's tests are all pure/httptest — no node
-  # needed), the goreleaser deprecation check, and a snapshot build that proves all
-  # six targets archive and the Homebrew cask renders before a human is asked to
-  # approve the publish.
+  # ── verify ────────────────────────────────────────────────────────────────
+  # Runs BEFORE the human-approval gate. Re-runs the unit suite (daxib's tests
+  # are all pure / httptest — no node, no anvil, no external service), the
+  # goreleaser deprecation + cosign-bundle config gates, and a pre-approval
+  # asset-name gate that renders the goreleaser name templates against the REAL
+  # tag and asserts all six archives + checksums.txt + the install.sh line
+  # resolve. A naming-drift bug is caught here, before a reviewer is ever asked
+  # to approve.
   verify:
-    name: verify (tests + snapshot build)
+    name: verify (tests + asset-name gate)
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
     permissions:
@@ -56,66 +78,144 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0 # goreleaser reads tag history for the changelog
+          # goreleaser reads tag history to compute the changelog; the asset-name
+          # gate also wants the full history so `goreleaser release --snapshot`
+          # resolves a sane version.
+          fetch-depth: 0
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
       - name: Unit tests
+        # No build tag = the pure unit suite (the same one ci.yml's test job runs).
+        # daxib's tests are httptest-only: no anvil/foundry/node here by design.
         run: go test ./...
+
       - uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
           distribution: goreleaser
           version: ${{ env.GORELEASER_VERSION }}
           install-only: true
+
       - name: goreleaser check (no deprecations)
+        # The config must be on dockers_v2 — the deprecation allowlist is empty.
         run: |
           set -euo pipefail
-          out="$(goreleaser check 2>&1)"; echo "$out"
-          echo "$out" | grep -iq 'deprecat' && { echo "::error::deprecated goreleaser stanza" >&2; exit 1; } || true
-      - name: Snapshot build (six targets + cask render)
-        # No publish, sign, or GHCR push — just prove the build/archive/cask-render
-        # path before the approval gate. CGO off (the shipped binaries are pure-Go).
-        env:
-          CGO_ENABLED: "0"
-        run: goreleaser release --snapshot --clean --skip=sign,docker,sbom,publish
+          out="$(goreleaser check 2>&1)"
+          echo "$out"
+          if echo "$out" | grep -iq 'deprecat'; then
+            echo "::error::goreleaser config uses a deprecated stanza" >&2
+            exit 1
+          fi
+
+      - name: cosign blob signing config gate
+        # cosign v3 requires a Sigstore bundle for sign-blob. The old detached
+        # .sig + .pem outputs fail only in the real OIDC signing step, so keep a
+        # cheap static gate before the release environment approval.
+        run: |
+          set -euo pipefail
+          if grep -Eq -- '--output-signature|--output-certificate' .goreleaser.yml; then
+            echo "::error::cosign sign-blob must use --bundle, not detached signature/certificate outputs" >&2
+            exit 1
+          fi
+          grep -q -- "--bundle=\${signature}" .goreleaser.yml
+
+      - name: Pre-approval asset-name gate
+        # Render the goreleaser name templates against the real tag (via a
+        # snapshot build that skips the CI-only / signing steps) and assert every
+        # consumable asset the install.sh + docs + smoke jobs depend on exists:
+        # all 6 archives (darwin/linux/windows × amd64/arm64), checksums.txt, and
+        # install.sh (pulled into checksums.txt via checksum.extra_files). A drift
+        # between install.sh's archive-name template and the goreleaser config is
+        # caught HERE — before a human is asked to approve the publish.
+        run: |
+          set -euo pipefail
+          goreleaser release --snapshot --clean --skip=sbom,sign,docker,publish
+          ver="$(python3 -c 'import json;print(json.load(open("dist/metadata.json"))["version"])')"
+          echo "Rendered snapshot version: $ver"
+          missing=0
+          for os_arch in \
+            darwin_amd64.tar.gz darwin_arm64.tar.gz \
+            linux_amd64.tar.gz  linux_arm64.tar.gz \
+            windows_amd64.zip   windows_arm64.zip; do
+            f="dist/daxib_${ver}_${os_arch}"
+            if [ ! -f "$f" ]; then
+              echo "::error::missing expected archive: $f" >&2
+              missing=1
+            fi
+          done
+          for f in dist/checksums.txt; do
+            [ -f "$f" ] || { echo "::error::missing $f" >&2; missing=1; }
+          done
+          # install.sh must be folded into checksums.txt — the single curl|sh
+          # asset every user executes is otherwise the only unsigned artifact.
+          if ! grep -q ' install.sh$' dist/checksums.txt; then
+            echo "::error::checksums.txt has no install.sh entry (checksum.extra_files drift)" >&2
+            missing=1
+          fi
+          [ "$missing" -eq 0 ] && echo "asset-name gate: all expected assets resolve"
+          exit "$missing"
 
   # ── goreleaser ──────────────────────────────────────────────────────────────
-  # The ONE write job, behind the `release` environment (human-approval gate).
-  # Builds + cosign-signs (keyless OIDC) + pushes the GHCR image + creates the
-  # GitHub Release + pushes the Homebrew cask to daxchain-io/homebrew-tap.
+  # The ONE write job. Gated behind the `release` environment (the human-approval
+  # gate + required reviewers). Builds + signs (cosign keyless OIDC) + SBOMs
+  # (syft) + pushes the multi-arch distroless GHCR image + creates the GitHub
+  # Release. homebrew_casks render-only (skip_upload: true) here — cask-publish
+  # pushes them.
   goreleaser:
-    name: goreleaser (sign + GHCR + release + cask)
+    name: goreleaser (sign + SBOM + GHCR + release)
     needs: verify
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    # The human-approval gate. The `release` environment carries required
+    # reviewers; the run pauses here until a reviewer approves.
     environment: release
     permissions:
       contents: write # create the GitHub Release + upload assets
       packages: write # push the image to ghcr.io/daxchain-io/images/daxib
       id-token: write # OIDC for cosign keyless signing (no key to steal)
+    # Expose the SHA256 subjects of the release archives so the provenance job's
+    # slsa-github-generator can sign a SLSA predicate over the just-built
+    # artifacts.
+    outputs:
+      subjects: ${{ steps.subjects.outputs.subjects }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # goreleaser reads tag history for the changelog
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      # cosign for the signs / docker_signs stanzas (keyless OIDC).
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # syft for the SBOM stanza (CI-only — syft is not required locally).
       - name: Install syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      # GoReleaser's dockers_v2 publish path invokes `docker buildx build
+      # --attest=type=sbom`. The default docker driver cannot emit attestations;
+      # use the container driver so SBOM attestations work during GHCR publish.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
         with:
           driver: docker-container
+
+      # GHCR login so dockers_v2 can push the multi-arch image. The default
+      # GITHUB_TOKEN with packages:write can push to the org's own registry.
       - name: Log in to GHCR
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
@@ -123,11 +223,316 @@ jobs:
           version: ${{ env.GORELEASER_VERSION }}
           args: release --clean
         env:
+          # GITHUB_TOKEN creates the release + uploads assets + pushes the GHCR
+          # image. The HOMEBREW_TAP_GITHUB_TOKEN is DELIBERATELY NOT exposed
+          # here — and this job sets NEITHER DAXIB_RELEASE_DISABLE nor
+          # DAXIB_CASK_SKIP_UPLOAD, so .goreleaser.yml's envOrDefault defaults
+          # apply: release.disable="false" (create the GitHub Release normally)
+          # and homebrew_casks.skip_upload="true" (cask RENDER-ONLY — computed
+          # into dist/ but NOT pushed). The cask-publish job holds the PAT and
+          # flips both. Keeping the PAT off this job means a goreleaser config
+          # slip can never push to the tap from the build job.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # The tap PAT (scoped to this `release` environment) lets the cask pipe
-          # push directly. DAXIB_CASK_SKIP_UPLOAD=false flips the goreleaser config's
-          # render-only default to publish — the cask's checksums come from THIS
-          # run's archives (the same bytes uploaded to the release), so a single run
-          # is self-consistent.
+
+      - name: Compute SLSA subjects
+        id: subjects
+        run: |
+          set -euo pipefail
+          # One subject per release archive — provenance covers the binaries
+          # users actually consume (brew / curl install / direct download). The
+          # `--` ends option parsing; using `*.tar.gz` (not `./*.tar.gz`) keeps
+          # the subject "name" field free of a `./` prefix.
+          subjects="$(cd dist && sha256sum -- *.tar.gz *.zip)"
+          echo "::group::SLSA subjects"
+          echo "$subjects"
+          echo "::endgroup::"
+          encoded="$(echo "$subjects" | base64 -w0)"
+          echo "subjects=${encoded}" >> "$GITHUB_OUTPUT"
+
+  # ── provenance ──────────────────────────────────────────────────────────────
+  # SLSA L3 build provenance over the release archives, via the
+  # slsa-github-generator reusable workflow (the path CNCF projects use). It runs
+  # in an isolated context and emits a Sigstore-keyless-signed in-toto predicate
+  # uploaded to the GitHub Release as .intoto.jsonl.
+  #
+  # NOTE: slsa-github-generator MUST be referenced by its semver tag (not a SHA) —
+  # slsa-verifier validates the provenance against the tagged release of the
+  # generator. This is the one documented exception to the SHA-pin rule.
+  provenance:
+    name: SLSA provenance
+    needs: [goreleaser]
+    if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    permissions:
+      actions: read # read the workflow run that built the artifacts
+      id-token: write # OIDC for keyless signing via Sigstore
+      contents: write # upload the predicate to the GitHub Release
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.goreleaser.outputs.subjects }}"
+      upload-assets: true
+      provenance-name: "daxib-${{ github.ref_name }}.intoto.jsonl"
+      # Public repository: emit full public provenance. The repository name in the
+      # Rekor transparency-log entry is intended for a public release.
+      private-repository: false
+
+  # ── cask-publish ────────────────────────────────────────────────────────────
+  # Pushes the Homebrew cask to daxchain-io/homebrew-tap. STABLE-ONLY: a
+  # prerelease tag (anything with a '-') never moves the cask. Holds the
+  # HOMEBREW_TAP_GITHUB_TOKEN — the ONLY place it is referenced. It re-runs
+  # goreleaser with the GitHub-release pipe DISABLED (DAXIB_RELEASE_DISABLE=true)
+  # and the cask upload still DISABLED (DAXIB_CASK_SKIP_UPLOAD=true), so
+  # goreleaser only renders dist/homebrew/Casks/daxib.rb locally. The workflow
+  # then rewrites the cask SHA values from the immutable release checksums.txt and
+  # pushes that corrected file to the tap. That avoids deriving cask checksums
+  # from a second rebuild while still keeping the tap PAT out of the write-heavy
+  # release/sign/GHCR job.
+  cask-publish:
+    name: cask-publish (stable only)
+    needs: [goreleaser]
+    runs-on: ubuntu-latest
+    # Stable-only: skip any prerelease (a dash in the tag name).
+    if: >-
+      github.ref_type == 'tag' &&
+      vars.DAXIB_RELEASE_ENABLED == 'true' &&
+      !contains(github.ref_name, '-')
+    # Same environment as goreleaser so the HOMEBREW_TAP_GITHUB_TOKEN secret
+    # (scoped to the `release` environment) is readable here and nowhere else.
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Render the cask
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          # Re-run goreleaser to render ONLY the homebrew cask. The skip set uses
+          # ONLY valid goreleaser v2 options: there is no `build` skip. We DROP
+          # docker/sbom/sign/announce (no GHCR re-push, no re-sign, no re-attest,
+          # no re-announce). We do NOT skip build/archive: this is a fresh runner
+          # with no prior dist/, and goreleaser needs archives to render the cask.
+          # The rendered SHA values are normalized from the already-published
+          # release checksums before anything is pushed to the tap.
+          #
+          # The two env vars below (see .goreleaser.yml) make this run cask-only:
+          #   DAXIB_RELEASE_DISABLE=true   → release.disable: the GitHub Release
+          #     pipe is OFF, so this job CANNOT delete/recreate (mode: replace) or
+          #     re-upload to the already-published, Rekor-logged, SLSA-attested
+          #     release. That is why `contents: read` suffices.
+          #   DAXIB_CASK_SKIP_UPLOAD=true → keeps goreleaser render-only; the
+          #     workflow's next step does the checksum normalization and tap push.
+          args: release --clean --skip=docker,sbom,sign,announce
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Disable the GitHub-release pipe so this job never re-touches the
+          # release the goreleaser job already published (fail-forward).
+          DAXIB_RELEASE_DISABLE: "true"
+          # Keep goreleaser render-only; the workflow pushes after normalizing.
+          DAXIB_CASK_SKIP_UPLOAD: "true"
+
+      - name: Normalize cask checksums from release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          asset_dir="$RUNNER_TEMP/daxib-release-assets"
+          mkdir -p "$asset_dir"
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern checksums.txt \
+            --dir "$asset_dir" \
+            --clobber
+          scripts/release/rewrite_cask_checksums.py \
+            --cask dist/homebrew/Casks/daxib.rb \
+            --checksums "$asset_dir/checksums.txt" \
+            --version "${{ github.ref_name }}"
+
+      - name: Push the cask to the tap
+        env:
+          # Fine-grained PAT, Contents:Read-and-Write on daxchain-io/homebrew-tap.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-          DAXIB_CASK_SKIP_UPLOAD: "false"
+        run: |
+          set -euo pipefail
+          tap_dir="$RUNNER_TEMP/homebrew-tap"
+          git clone \
+            "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/daxchain-io/homebrew-tap.git" \
+            "$tap_dir"
+          mkdir -p "$tap_dir/Casks"
+          cp dist/homebrew/Casks/daxib.rb "$tap_dir/Casks/daxib.rb"
+          cd "$tap_dir"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -z "$(git status --porcelain -- Casks/daxib.rb)" ]; then
+            echo "Casks/daxib.rb already matches ${{ github.ref_name }}"
+          else
+            git add Casks/daxib.rb
+            git commit -m "Update daxib to ${{ github.ref_name }}"
+            git push origin HEAD:main
+          fi
+
+      - name: Verify published cask checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          published="$RUNNER_TEMP/published-daxib.rb"
+          checksums="$RUNNER_TEMP/daxib-release-assets/checksums.txt"
+          gh api repos/daxchain-io/homebrew-tap/contents/Casks/daxib.rb \
+            --jq .content | base64 --decode > "$published"
+          scripts/release/rewrite_cask_checksums.py \
+            --check \
+            --cask "$published" \
+            --checksums "$checksums" \
+            --version "${{ github.ref_name }}"
+
+  # ── install-smoke ───────────────────────────────────────────────────────────
+  # Post-publication validation: curl the JUST-CUT install.sh from the release
+  # and install --version <tag> across the gnarliest distros + macOS. Catches
+  # asset-naming drift, missing platforms, install.sh upload failures, and
+  # checksums.txt format changes — the "we shipped a broken release" class. A red
+  # check here does NOT roll back (artifacts are already public) but is the
+  # loudest signal that the next curl|sh user will have a bad time.
+  install-smoke:
+    name: install.sh smoke — ${{ matrix.image }}
+    needs: [goreleaser]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - alpine:3.20
+          - debian:12-slim
+          - ubuntu:22.04
+          - fedora:40
+    steps:
+      - name: Install just-cut release inside ${{ matrix.image }}
+        # Fetch install.sh AND the archive from the REAL public release URLs — the
+        # exact path a `curl | sh` user hits. install.sh's default base URL is the
+        # public /releases/download/<tag>/, so no DAXIB_INSTALL_BASE_URL override is
+        # needed. (Requires the repository to be public, which the stable line is.)
+        run: |
+          docker run --rm ${{ matrix.image }} sh -eux -c '
+            case "$(. /etc/os-release && echo "$ID")" in
+              alpine) apk add --no-cache curl ca-certificates tar ;;
+              debian|ubuntu) apt-get update -qq && apt-get install -y -qq curl ca-certificates tar ;;
+              fedora) dnf install -y -q curl ca-certificates tar ;;
+            esac
+            curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install.sh" -o /tmp/install.sh
+            sh /tmp/install.sh --version ${{ github.ref_name }} --prefix /tmp/daxibroot
+            test -x /tmp/daxibroot/bin/daxib
+            test -f /tmp/daxibroot/bin/.daxib.install-info
+            grep -q "installer=curl" /tmp/daxibroot/bin/.daxib.install-info
+            grep -q "version=${{ github.ref_name }}" /tmp/daxibroot/bin/.daxib.install-info
+            /tmp/daxibroot/bin/daxib version
+          '
+
+  install-smoke-macos:
+    name: install.sh smoke — macOS
+    needs: [goreleaser]
+    runs-on: macos-14
+    if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: Install just-cut release on macOS arm64
+        # Real public release URL — install.sh defaults to /releases/download/<tag>/.
+        run: |
+          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install.sh" -o /tmp/install.sh
+          sh /tmp/install.sh --version ${{ github.ref_name }} --prefix /tmp/daxibroot
+          test -x /tmp/daxibroot/bin/daxib
+          test -f /tmp/daxibroot/bin/.daxib.install-info
+          grep -q "installer=curl" /tmp/daxibroot/bin/.daxib.install-info
+          /tmp/daxibroot/bin/daxib version
+
+  # ── install-smoke-cosign ────────────────────────────────────────────────────
+  # Exercises the --verify-signature branch: install.sh downloads
+  # checksums.txt.sigstore.json and runs `cosign verify-blob` against the keyless
+  # cert chain pinned to this repo's release workflow. A code path the
+  # ci-install-script.yml smoke (no cosign on the runner) never covers.
+  install-smoke-cosign:
+    name: install.sh smoke — --verify-signature
+    needs: [goreleaser]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install with --verify-signature
+        # Real public release URL; cosign is on PATH so --verify-signature performs
+        # the keyless signature check against checksums.txt.sigstore.json.
+        run: |
+          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install.sh" -o /tmp/install.sh
+          sh /tmp/install.sh --version ${{ github.ref_name }} \
+            --prefix /tmp/daxibroot --verify-signature
+          test -x /tmp/daxibroot/bin/daxib
+          /tmp/daxibroot/bin/daxib version
+
+  # ── image-smoke ─────────────────────────────────────────────────────────────
+  # Pull-and-run the just-pushed multi-arch GHCR image, assert `daxib version`
+  # runs (proves the distroless image executes the binary, right arch, non-root,
+  # CA roots present), and cosign-verify the image manifest by digest against the
+  # exact-workflow keyless identity.
+  image-smoke:
+    name: image smoke — GHCR pull + cosign verify
+    needs: [goreleaser]
+    runs-on: ubuntu-latest
+    # Image floating tags (:latest, :X.Y) only move on stable; the exact :<tag>
+    # exists for every tag, so this job runs for prereleases too (pinned to the
+    # exact tag).
+    if: github.ref_type == 'tag' && vars.DAXIB_RELEASE_ENABLED == 'true'
+    permissions:
+      contents: read
+      packages: read # pull from GHCR
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run the image
+        run: |
+          IMAGE="${DAXIB_IMAGE_REPOSITORY}:${GITHUB_REF_NAME#v}"
+          pulled=0
+          for _ in $(seq 1 30); do
+            if docker pull "$IMAGE"; then
+              pulled=1
+              break
+            fi
+            sleep 3
+          done
+          if [ "$pulled" -ne 1 ]; then
+            echo "::error::image not pullable after 90s: $IMAGE" >&2
+            exit 1
+          fi
+          docker run --rm "$IMAGE" version
+
+      - name: cosign verify the image manifest by digest
+        run: |
+          set -euo pipefail
+          IMAGE="${DAXIB_IMAGE_REPOSITORY}:${GITHUB_REF_NAME#v}"
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")"
+          echo "Verifying $DIGEST"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/\.github/workflows/release\.yml@refs/tags/v" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$DIGEST"
