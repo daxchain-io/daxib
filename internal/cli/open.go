@@ -25,7 +25,7 @@ func openService(ctx context.Context, rs *rootState) (*service.Service, func(), 
 }
 
 // buildServiceOptions assembles service.Options from the global flags + env, with
-// the documented precedence: --keystore > DAXIB_KEYSTORE > platform default;
+// the documented precedence: --keystore > DAXIB_KEYSTORE > ~/.daxib/keystore;
 // --network > DAXIB_NETWORK; --wallet > DAXIB_WALLET.
 func buildServiceOptions(rs *rootState) service.Options {
 	keystore := rs.flags.Keystore
@@ -70,8 +70,8 @@ func buildServiceOptions(rs *rootState) service.Options {
 		}
 	}
 
-	// --state-dir > DAXIB_STATE_DIR > <data>/state (resolved in the service from the
-	// keystore parent when empty). The state dir holds the tx journal + send locks.
+	// --state-dir > DAXIB_STATE_DIR > ~/.daxib/state. The state dir holds the tx
+	// journal + send locks.
 	stateDir := rs.flags.StateDir
 	if stateDir == "" {
 		if v, ok := os.LookupEnv("DAXIB_STATE_DIR"); ok && v != "" {

@@ -51,9 +51,9 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	pf.BoolVar(&rs.flags.Quiet, "quiet", false, "suppress non-essential human output")
 	pf.StringVar(&rs.flags.Network, "network", "", "Bitcoin network (mainnet/testnet/signet/regtest); overrides the configured default")
 	pf.StringVar(&rs.flags.Backend, "backend", "", "backend endpoint name (bitcoind RPC / Electrum / Esplora); overrides the network's default for this call")
-	pf.StringVar(&rs.flags.Config, "config", "", "config directory holding config.toml (default: platform XDG path)")
-	pf.StringVar(&rs.flags.Keystore, "keystore", "", "keystore directory (default: platform data path)")
-	pf.StringVar(&rs.flags.StateDir, "state-dir", "", "mutable state directory (default: platform state path)")
+	pf.StringVar(&rs.flags.Config, "config", "", "config directory holding config.toml (default: ~/.daxib)")
+	pf.StringVar(&rs.flags.Keystore, "keystore", "", "keystore directory (default: ~/.daxib/keystore)")
+	pf.StringVar(&rs.flags.StateDir, "state-dir", "", "mutable state directory (default: ~/.daxib/state)")
 	pf.BoolVarP(&rs.flags.Yes, "yes", "y", false, "skip confirmations; required for mutating ops when non-interactive")
 
 	root.AddCommand(

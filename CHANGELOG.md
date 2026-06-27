@@ -38,6 +38,17 @@ non-interactive path, and a documented exit code:
   The sealed `policy.*` subtree is read-only here (`usage.policy_key`); an unknown key is
   `ref.not_found` (exit `10`).
 
+### Changed
+
+- **Default on-disk home is now a single `~/.daxib/` dotfolder** (holding `config.toml`,
+  `keystore/`, and `state/`) instead of the platform XDG/AppData path
+  (`~/.config/daxib` on Linux, `~/Library/Application Support/daxib` on macOS). One
+  discoverable, easy-to-back-up directory; a deliberate divergence from daxie's
+  `~/.config/daxie`. The `--config` / `--keystore` / `--state-dir` flags and the
+  `DAXIB_CONFIG` / `DAXIB_KEYSTORE` / `DAXIB_STATE_DIR` env vars still override it. An
+  existing alpha install under the old path keeps working if you point those at it (or
+  move the directory to `~/.daxib`).
+
 ## [0.1.3] - 2026-06-27
 
 Build/release-pipeline parity with daxie. No change to the wallet itself.
