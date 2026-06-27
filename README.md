@@ -49,6 +49,27 @@ cosign-signed (keyless OIDC, Rekor transparency log) with SHA256 checksums; a
 multi-arch, distroless, non-root OCI image is published to
 `ghcr.io/daxchain-io/images/daxib`.
 
+**Verify before you trust it.** Confirm the release was built and signed by this
+repo's release workflow, then check your archive against the signed checksums:
+
+```sh
+# 1. verify the cosign keyless signature on checksums.txt. The identity flags are
+#    REQUIRED — without them, cosign trusts ANY valid Sigstore signature.
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/daxchain-io/daxib/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+
+# 2. check your downloaded archive against the now-trusted checksums
+#    (Linux: sha256sum; macOS: shasum -a 256):
+sha256sum --check --ignore-missing checksums.txt
+```
+
+The `curl | sh` installer (with `--verify-signature`) and the `brew` cask do this
+for you. See [docs/SECURITY.md](docs/SECURITY.md#supply-chain-verifying-a-release)
+for the full recipe — the GHCR image signature, the SLSA provenance, and the SBOMs.
+
 ```sh
 daxib version
 ```

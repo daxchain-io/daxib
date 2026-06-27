@@ -302,8 +302,9 @@ process can defend, and it is stated, not hidden:
 ### The stronger postures are roadmap, not v1
 
 The Bitcoin-native ways to *structurally* close the offline-decrypt residual exist,
-and the PSBT plumbing built in v1 is meant to make them no-refactor additions — but
-they are **not in this release**:
+and daxib's internal tx-building + BIP-143 signing path is meant to make them
+low-refactor additions (a `psbt` noun is the first step) — but they are **not in
+this release**:
 
 - **Watch-only + external PSBT signer** — no private keys on the agent host at all;
   the agent builds PSBTs and an out-of-band signer signs. This closes the
@@ -314,6 +315,65 @@ they are **not in this release**:
 
 These get real once daxib holds meaningful value; v1's job is the working autonomous
 wallet with the sealed software guardrails above.
+
+## Supply chain: verifying a release
+
+The guardrails above protect a *running* wallet. They are worth nothing if the
+binary you ran isn't the one this project built — so every release is signed, and
+you can (and should) verify it before trusting it.
+
+### What is published and signed
+
+Each tagged release carries:
+
+- **Archives** for darwin / linux / windows × amd64 / arm64, plus `checksums.txt`
+  (the SHA256 of every archive).
+- **A cosign keyless signature** over `checksums.txt`, as a Sigstore bundle
+  (`checksums.txt.sigstore.json`) recorded in the public Rekor transparency log.
+  There is **no long-lived signing key** to steal: the signature is bound to an
+  ephemeral certificate issued to *this repo's `release.yml` workflow running on a
+  `vX.Y.Z` tag*, via GitHub's OIDC identity.
+- **SBOMs** — a syft SBOM per archive (`*.sbom.json`).
+- **SLSA provenance** — a build-provenance attestation for the release assets.
+- **A multi-arch OCI image** at `ghcr.io/daxchain-io/images/daxib` (distroless,
+  non-root), itself cosign-signed by the same workflow identity.
+
+### Verify an archive
+
+```sh
+# 1. Verify the signature on checksums.txt. The identity flags are REQUIRED — without
+#    them, cosign accepts ANY valid Sigstore signature, which proves nothing about who
+#    produced this file. They pin it to daxib's release workflow on a version tag.
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/daxchain-io/daxib/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+
+# 2. With checksums.txt now trusted, check the archive you downloaded against it
+#    (Linux: sha256sum; macOS: shasum -a 256):
+sha256sum --check --ignore-missing checksums.txt
+```
+
+A failure on step 1 means the checksums file was not signed by daxib's release
+workflow — **do not trust the download**. A failure on step 2 means your archive
+does not match the signed checksum (corrupted or tampered in transit).
+
+### Verify the container image
+
+```sh
+cosign verify ghcr.io/daxchain-io/images/daxib:1.0.0 \
+  --certificate-identity-regexp '^https://github.com/daxchain-io/daxib/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+### What does it for you
+
+The `curl | sh` installer runs exactly this signature check when invoked with
+`--verify-signature` (and opportunistically when `cosign` is on `PATH`), and the
+Homebrew cask verifies the SHA256 of the archive it installs. The identity +
+issuer above are the same values `scripts/install.sh` pins, so a manual check and
+the installer agree.
 
 ## Reference: the security-relevant exit codes
 
