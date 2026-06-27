@@ -15,10 +15,12 @@ Ed25519-sealed policy, one signing chokepoint) re-grounded on Bitcoin's UTXO mod
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](https://go.dev/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: `v0.1.0` — alpha.** The first release is published and `brew`-installable.
-> Everything documented here is shipped and works; the CLI surface and JSON schemas
-> may still change before v1.0. Daxib signs and broadcasts real transactions — use a
-> testnet and a small mainnet float while evaluating.
+> **Status: `v1.0.0` — stable.** The CLI command surface, the `--json` schemas, the
+> exit codes, the MCP tool surface, and the on-disk formats are **semver-protected**:
+> a breaking change bumps the major version. Validated end-to-end against a real
+> `bitcoind` regtest node in CI. Daxib signs and broadcasts real transactions and its
+> custody is a hot keystore in one OS trust domain — keep mainnet balances to a
+> petty-cash float and read [docs/SECURITY.md](docs/SECURITY.md) first.
 
 ---
 
@@ -203,7 +205,7 @@ co-sign) are on the roadmap below, not in this release.
 
 ---
 
-## Roadmap (not in `v0.1.0`)
+## Roadmap (post-`v1.0`)
 
 Deferred Bitcoin-native capabilities — documented honestly rather than overbuilt up
 front:
@@ -224,7 +226,11 @@ front:
 
 | Doc | What |
 |---|---|
-| [docs/PLAN.md](docs/PLAN.md) | The design artifact: the full daxie→daxib mapping, the Bitcoin-unique design, the command surface, the security model, and the roadmap |
+| [docs/COMMANDS.md](docs/COMMANDS.md) | The full command reference — every noun, verb, flag, exit code, and JSON shape |
+| [docs/AGENTS.md](docs/AGENTS.md) | Driving daxib from an AI agent: the MCP tools, the secret env channels, the exit codes to branch on, and the safety contract |
+| [docs/SECURITY.md](docs/SECURITY.md) | The security model: the two passphrases, the sealed policy, the threat model, and the honest residual |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Paths (`~/.daxib`), environment variables, networks, and backends (incl. the `txindex=1` requirement for a Core node) |
+| [docs/PLAN.md](docs/PLAN.md) | The design artifact: the full daxie→daxib mapping, the Bitcoin-unique design, and the roadmap |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 See the sibling project [daxie](https://github.com/daxchain-io/daxie) for the mature

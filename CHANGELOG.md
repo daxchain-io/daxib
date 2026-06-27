@@ -6,6 +6,15 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-27
+
+First **stable** release. The CLI command surface, the `--json` schemas, the exit
+codes, the MCP tool surface, and the on-disk formats (keystore, `meta.json` v2,
+sealed policy anchor, tx journal) are now **semver-protected** — a breaking change
+bumps the major version. daxib reaches full daxie-v1 command-surface parity,
+hardened by a dedicated v1-readiness audit and validated end-to-end against a real
+`bitcoind` regtest node in CI.
+
 ### Added
 
 Command-surface parity with daxie's v1 — seven new nouns over the same one-core,
@@ -38,6 +47,23 @@ non-interactive path, and a documented exit code:
   The sealed `policy.*` subtree is read-only here (`usage.policy_key`); an unknown key is
   `ref.not_found` (exit `10`).
 
+Plus, from the v1-readiness pass:
+
+- **`network`** — `use` / `show` / `list` to select + inspect the active network and
+  persist a default (the `defaults.network` config key).
+- **`tx abandon`** — an operator escape hatch that frees a never-broadcast `signed`
+  tx's UTXOs and refunds its spend reservation. Refuses any tx with a recorded
+  broadcast or a committed reservation (it may still confirm).
+- **`policy release`** — admin-gated clearing of a stuck **pending** spend
+  reservation (refuses a committed one).
+- **5 new MCP tools** — `tx_speedup`, `tx_cancel`, `sign_message`, `verify`,
+  `convert` (18 tools total), each under the same guardrails as its CLI counterpart.
+- **Documentation set** — `docs/COMMANDS.md` (full reference), `docs/AGENTS.md`
+  (driving daxib from an agent), `docs/SECURITY.md` (the security model), and
+  `docs/CONFIGURATION.md` (paths, env, networks, backends).
+- **Real-node integration suite** — a build-tagged regtest `bitcoind` end-to-end
+  test (fund → send → confirm → RBF-replace → confirm) in its own CI workflow.
+
 ### Changed
 
 - **Wallets are network-agnostic by default — one wallet, any network.** A
@@ -63,6 +89,29 @@ non-interactive path, and a documented exit code:
   `DAXIB_CONFIG` / `DAXIB_KEYSTORE` / `DAXIB_STATE_DIR` env vars still override it. An
   existing alpha install under the old path keeps working if you point those at it (or
   move the directory to `~/.daxib`).
+
+- **No silent network default.** Every network-using command now requires an
+  explicit network (`--network` > `DAXIB_NETWORK` > a persisted `network use`
+  default) and otherwise fails `usage.network_required` (exit 2) — it can no longer
+  silently act on **mainnet**. (The built-in mainnet fallback was removed.)
+- **`--yes` now gates a real confirmation.** `tx send` / `speedup` / `cancel` /
+  `abandon` show a y/N prompt (recipient / amount / fee / network) at a TTY; `--yes`
+  skips it, and a non-interactive run without `--yes` still fails closed.
+- **Exit `7` (fee-policy-denied) is live again** and `retryable=true` for a
+  fee-rate-cap denial, distinct from the exit-`3` per-tx / per-day / allow-deny
+  denials.
+
+### Security
+
+- **Crash-safe admin-passphrase rotation.** `policy change-admin-passphrase` uses a
+  three-phase staged rotation over a transitional dual-key anchor; recovery at the
+  next open converges any crash point to a verifiable single-key anchor — the
+  guardrails can never be left wiped or unverifiable mid-rotation.
+- **No spend-budget refund for a possibly-live tx.** The offline reconciler leaves a
+  still-`signed` (maybe-broadcast) transaction's rolling-24h reservation in place
+  (fail closed) until an online path positively settles it.
+- **`sign message` is now covered by the wallet network-scope guard** — the last
+  ungated key operation, so a `--bind` wallet is consistently locked across every op.
 
 ## [0.1.3] - 2026-06-27
 
