@@ -102,6 +102,7 @@ func startRegtest(ctx context.Context, t *testing.T) *node {
 		"-rpcuser="+n.rpcUser,
 		"-rpcpassword="+n.rpcPass,
 		"-fallbackfee=0.0002", // regtest has no fee market; the node's own sendtoaddress needs this
+		"-txindex=1",          // daxib's Core TxStatus uses getrawtransaction, which needs txindex to find a CONFIRMED non-wallet tx by txid
 		"-server=1",
 		"-listen=0", // no P2P peers needed
 		"-printtoconsole=0",
