@@ -6,6 +6,11 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-27
+
+A release-pipeline verification cut — no functional, dependency, or format changes
+since 0.1.1.
+
 ## [0.1.1] - 2026-06-27
 
 Maintenance: a Windows CI test fix and a Dependabot dependency refresh. No change to
