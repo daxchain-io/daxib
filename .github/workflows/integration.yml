@@ -1,0 +1,50 @@
+# Real-node integration: stand up a throwaway bitcoind regtest node and drive the
+# ACTUAL daxib binary through fund -> send -> confirm -> RBF-replace -> confirm,
+# proving the pipeline against real Bitcoin consensus (the unit suite uses mock
+# backends). Lives in its own workflow so a flake here never gates `ci` / `static`.
+name: integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.4"
+  BITCOIN_VERSION: "31.0"
+
+jobs:
+  regtest:
+    name: regtest end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install Bitcoin Core (bitcoind + bitcoin-cli)
+        run: |
+          set -euo pipefail
+          ver="${BITCOIN_VERSION}"
+          base="https://bitcoincore.org/bin/bitcoin-core-${ver}"
+          tarball="bitcoin-${ver}-x86_64-linux-gnu.tar.gz"
+          cd /tmp
+          curl -fsSLO "${base}/${tarball}"
+          curl -fsSLO "${base}/SHA256SUMS"
+          # Verify the tarball against the published checksum before extracting.
+          grep "  ${tarball}\$" SHA256SUMS | sha256sum -c -
+          tar -xzf "${tarball}"
+          echo "/tmp/bitcoin-${ver}/bin" >> "$GITHUB_PATH"
+
+      - name: Show bitcoind version
+        run: bitcoind --version | head -1
+
+      - name: Regtest end-to-end tests
+        run: go test -tags=integration -v -timeout 20m ./integration/...
