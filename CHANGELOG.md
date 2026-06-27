@@ -6,6 +6,24 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-27
+
+Maintenance: a Windows CI test fix and a Dependabot dependency refresh. No change to
+the wallet's behavior or on-disk formats.
+
+### Fixed
+
+- `internal/fsx` `TestWriteAtomicCreatesAt0600` asserted POSIX `0600` permissions,
+  which don't hold on Windows (Go reports `0666`; owner-only access is enforced by a
+  DACL in `perms_windows.go`). The assertion is now POSIX-only, turning the
+  windows-latest / windows-11-arm CI test jobs green.
+
+### Changed
+
+- Dependency refresh (Dependabot): `actions/setup-go` 6.4.0 → 6.5.0;
+  `btcd/btcec/v2` 2.3.5 → 2.5.0, `btcd/chaincfg/chainhash` 1.1.0 → 1.2.0,
+  `go-toml/v2` 2.4.0 → 2.4.2, `x/crypto` 0.47.0 → 0.53.0, `x/text` 0.33.0 → 0.38.0.
+
 ## [0.1.0] - 2026-06-27
 
 First release — a cosign-signed GitHub Release, a Homebrew cask
@@ -55,13 +73,6 @@ small mainnet float while evaluating.
   lifting the guardrail.
 - The broadcast reject-classifier is conservative: transient/unknown backend
   errors leave a record recoverable instead of terminalizing a possibly-live tx.
-
-### Fixed
-
-- `internal/fsx` `TestWriteAtomicCreatesAt0600` asserted POSIX `0600` permissions,
-  which don't hold on Windows (Go reports `0666`; owner-only access is enforced by a
-  DACL in `perms_windows.go`). The assertion is now POSIX-only, turning the
-  windows-latest / windows-11-arm CI test jobs green.
 
 ### Validated
 
