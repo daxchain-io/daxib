@@ -54,3 +54,25 @@ const descSend = "Sign and broadcast a Bitcoin transfer. Coin-selects from the w
 // descAddressNew is the receive affordance (§6.1): the agent's legitimate path to
 // a fresh invoice address.
 const descAddressNew = "Derive and record the NEXT receive address for a wallet (a fresh invoice address to hand a counterparty). Derivation is from the stored xpub — no passphrase, no signing. Set 'change':true for an internal change address instead (rarely needed). Returns the ref (wallet/branch/index), the bech32 address, and the full BIP-84 path. This is the agent's sanctioned way to get a new address; raw key derivation and wallet creation are NOT exposed."
+
+// ── RBF replacements (policy-gated, like send) ───────────────────────────────
+
+// descTxSpeedup is the speedup RBF replacement (GAP-2): policy-gated exactly like
+// send (the replacement is coin-selected → policy.Reserve → signed → broadcast).
+const descTxSpeedup = "Replace an unconfirmed, RBF-signaling send with a higher-fee transaction paying the SAME recipient (Bitcoin BIP-125 fee bump). The replacement is POLICY-CHECKED before signing exactly like a fresh send — only the additional fee is charged against the rolling-24h limit, but the fee-rate cap and destination rules still apply. 'txid' is the original (still-unconfirmed) transaction; 'fee_rate' (sat/vByte) overrides the default bump (the backend fast tier, never below the original + 1). Waits for confirmation by default over MCP. Returns the replacement txid (replaces_txid names the original) and status. A target already confirmed/replaced is a tx_conflict error."
+
+// descTxCancel is the cancel RBF replacement (GAP-2): redirects the funds to the
+// wallet itself, voiding the payment; policy-gated like send.
+const descTxCancel = "Cancel an unconfirmed, RBF-signaling send by replacing it with a higher-fee transaction that redirects ALL funds to a fresh wallet-owned change address, voiding the original payment (Bitcoin BIP-125). The replacement is POLICY-CHECKED before signing like any send (paying yourself always satisfies the destination rules; the fee-rate cap still applies). 'txid' is the original (still-unconfirmed) transaction; 'fee_rate' (sat/vByte) overrides the default bump (the backend fast tier, never below the original + 1). Waits for confirmation by default over MCP. Returns the replacement txid (replaces_txid names the voided original) and status. A target already confirmed/replaced is a tx_conflict error."
+
+// ── BIP-322 message sign / verify ────────────────────────────────────────────
+
+// descSignMessage is keystore-gated (it unlocks a key), like send. The keystore
+// passphrase arrives out-of-band (the env channel), never as a tool argument.
+const descSignMessage = "Sign an arbitrary message with a wallet address's key (Bitcoin BIP-322 'simple', for proving address ownership — NOT a fund movement). 'ref' is a bech32 address or a 'wallet/branch/index' derivation ref; 'message' is the text to sign. Unlocking the key needs the keystore passphrase, which is supplied to the server out-of-band (never a tool argument). Returns the signing address and the base64 BIP-322 witness signature. Signs nothing on-chain and moves no funds."
+
+// descVerify is passphrase-free and pure (no keystore, no backend).
+const descVerify = "Verify a Bitcoin BIP-322 'simple' message signature against an address (passphrase-free, no signing). 'address', 'message', and the base64 'signature' fully determine the result. A signature that decodes but does NOT match is NOT an error — it returns valid:false (branch on the field); only a malformed address or undecodable signature is an error. Read-only."
+
+// descConvert is the pure sat<->BTC utility (no keystore, no backend, no policy).
+const descConvert = "Convert a Bitcoin amount between satoshis and BTC, exactly (no floating point). 'amount' carries its unit as a suffix ('0.001btc', '150000sat') or is a bare BTC number; 'to' names the target unit (sat|sats|btc), or omit it to convert to the OTHER unit. Returns the canonical integer-sat value, the exact 8-dp BTC string, and the result in the requested unit. Pure utility — touches no wallet, no key, no backend."

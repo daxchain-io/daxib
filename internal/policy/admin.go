@@ -148,61 +148,11 @@ func (e *Engine) Reset(adminPass *secret.Bytes, refreshSelf []string, writtenBy 
 	return anchor, nil
 }
 
-// ChangeAdminPassphrase rotates the admin passphrase: it re-derives the policy body
-// under a fresh salt + the new passphrase, re-seals, and returns the new anchor
-// (new verify key + salt, watermark preserved/bumped). For v1 this is the simple
-// single-shot rotation (authenticate current → re-derive new family → re-seal);
-// it MUST re-derive and re-seal correctly. Requires an anchor.
-func (e *Engine) ChangeAdminPassphrase(current, next *secret.Bytes) (policyseal.Anchor, error) {
-	if !e.anchorFound {
-		return policyseal.Anchor{}, errAdminAuth("no anchor is pinned; nothing to rotate")
-	}
-	if next == nil || next.Len() == 0 {
-		return policyseal.Anchor{}, errAdminAuth("the new admin passphrase is required")
-	}
-	// Authenticate the CURRENT passphrase and load the verified body.
-	skOld, err := e.authenticate(current)
-	if err != nil {
-		return policyseal.Anchor{}, err
-	}
-	zeroKey(skOld)
-	lr, present, lerr := e.loadActive()
-	if lerr != nil {
-		return policyseal.Anchor{}, lerr
-	}
-	if !present {
-		return policyseal.Anchor{}, errSeal("missing", "no policy to re-seal")
-	}
-
-	// Derive the NEW key family under a fresh salt.
-	salt, serr := policyseal.NewSalt()
-	if serr != nil {
-		return policyseal.Anchor{}, errState("generating rotation salt", serr)
-	}
-	params := e.anchor.Scrypt
-	skNew, pkNew, derr := policyseal.DeriveSealKey(next.Reveal(), salt, params)
-	if derr != nil {
-		return policyseal.Anchor{}, errAdminAuth("deriving the new seal key: " + derr.Error())
-	}
-	defer zeroKey(skNew)
-
-	// Re-seal the SAME body (nonce bumped) under the new key.
-	body := lr.policy
-	body.Nonce = e.anchor.NonceWatermark + 1
-	body.UpdatedAt = e.now().UTC().Format(time.RFC3339)
-	if werr := e.sealAndWriteWith(skNew, body); werr != nil {
-		return policyseal.Anchor{}, werr
-	}
-	anchor := e.anchor
-	anchor.VerifyKey = policyseal.EncodeKey(pkNew)
-	anchor.VerifyKeyNext = ""
-	anchor.StagedSalt = ""
-	anchor.Salt = policyseal.EncodeSalt(salt)
-	anchor.Scrypt = params
-	anchor.NonceWatermark = body.Nonce
-	e.anchor = anchor
-	return anchor, nil
-}
+// Admin-passphrase rotation is the SI-1 crash-safe THREE-phase staged protocol in
+// rotation.go (StageAdminRotation → ResealUnderStagedRotation → PromoteAdminRotation,
+// with RecoverAdminRotation converging an interrupted rotation at Open). The old
+// single-shot rotate-then-reland was removed: it could leave policy.json sealed under
+// the new key while the anchor still pinned the old one on a crash (fail-open).
 
 // ── the shared mutation pipeline ─────────────────────────────────────────────
 

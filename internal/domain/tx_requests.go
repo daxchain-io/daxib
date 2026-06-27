@@ -128,6 +128,29 @@ type CancelRequest struct {
 	Yes     bool     `json:"-"`
 }
 
+// AbandonRequest is the wire input for `tx abandon <txid>` (GAP-1): the OPERATOR-only
+// recovery for a never-broadcast `signed` record whose inputs would otherwise be
+// excluded from coin-selection forever. It terminalizes the journal record `failed`
+// (freeing its UTXOs) and releases its policy reservation — but ONLY when the record
+// has NO recorded broadcast (status `signed`). Yes is the frontend confirmation flag
+// (never serialized); abandoning is irreversible.
+type AbandonRequest struct {
+	Wallet string `json:"wallet,omitempty"`
+	Txid   string `json:"txid"`
+	Yes    bool   `json:"-"`
+}
+
+// AbandonResult is the wire output for `tx abandon`: the abandoned record's id/txid,
+// the freed inputs, and whether a policy reservation was released.
+type AbandonResult struct {
+	JournalID           string  `json:"journal_id"`
+	Txid                string  `json:"txid,omitempty"`
+	Network             Network `json:"network"`
+	Wallet              string  `json:"wallet,omitempty"`
+	FreedInputs         int     `json:"freed_inputs"`
+	ReservationReleased bool    `json:"reservation_released"`
+}
+
 // TxInputRef is one selected input in a TxResult (outpoint + the address it pays
 // from + its value).
 type TxInputRef struct {

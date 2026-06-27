@@ -41,6 +41,20 @@ func writeToolDef(name, desc string) *mcp.Tool {
 	}
 }
 
+// signToolDef marks the BIP-322 sign_message tool (GAP-2): it is NOT read-only (it
+// unlocks a key behind the keystore passphrase, so a host should surface a
+// confirmation affordance and `mcp tools` classifies it "sign"), but it is NOT
+// destructive either — it modifies nothing on-chain and mutates no state, it only
+// produces a signature. So ReadOnlyHint=false, DestructiveHint=false (distinct from
+// the funds-moving writeToolDef, which is DestructiveHint=true).
+func signToolDef(name, desc string) *mcp.Tool {
+	return &mcp.Tool{
+		Name:        name,
+		Description: desc,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: ptr(false)},
+	}
+}
+
 // ptr returns a pointer to v. The SDK's optional-bool annotations (DestructiveHint)
 // are *bool so "false" is distinguishable from "unset"; ptr lets the definitions
 // read declaratively.

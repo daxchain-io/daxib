@@ -29,6 +29,11 @@ var broadcastBackoff = []time.Duration{0, time.Second, 2 * time.Second, 4 * time
 // terminalize on a permanent reject, leave `signed` on transport exhaustion (the
 // recoverable, idempotent-rebroadcast case).
 func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domain.EventSink) (domain.TxResult, error) {
+	// No silent default: a send with no resolved network fails before any address
+	// decode (which is network-specific) or wallet/backend work.
+	if err := s.requireNetwork(); err != nil {
+		return domain.TxResult{}, err
+	}
 	// Resolve --to through the contacts address book FIRST: a contact NAME maps to
 	// its pinned address; a raw address falls through unchanged. From here on req.To
 	// is always a raw address, so the validation + build path is identical for
@@ -487,6 +492,12 @@ func (s *Service) reconcileAtOpen(ctx context.Context) {
 	// NOT dial here (Open must stay offline-safe), so there is nothing to do beyond
 	// confirming the journal is readable; swallow any read error.
 	_, _ = s.journal.Unresolved(ctx, s.net)
+
+	// Converge any interrupted admin-passphrase rotation (SI-1) FIRST: roll a
+	// half-finished staged rotation forward (promote) or back (drop the staged key) so
+	// the anchor + policy.json pair is single-key and verifiable before anything else
+	// reads the seal. Best-effort, offline.
+	s.reconcilePolicyRotation(ctx)
 
 	// Reconcile orphaned policy spend reservations against the journal (a crash
 	// between Reserve and Commit/Release): a reservation whose record reached

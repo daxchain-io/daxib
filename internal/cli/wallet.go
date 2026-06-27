@@ -86,7 +86,11 @@ func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 
 			return render.Result(cmd.OutOrStdout(), m, res, func(w io.Writer) {
 				render.Line(w, m, "wallet %q created (%s) — %s", res.Name, res.WalletID, scopeLabel(res.Scope, res.Network))
-				render.Line(w, m, "receive %s -> %s", res.Receive0, res.Receive0Address)
+				if res.Receive0Address != "" {
+					render.Line(w, m, "receive %s -> %s", res.Receive0, res.Receive0Address)
+				} else {
+					render.Line(w, m, "(no network selected — sample address omitted; select one with --network or `daxib network use`)")
+				}
 				if disp.echoInResult {
 					render.Line(w, m, "")
 					render.Line(w, m, "RECORD THIS MNEMONIC — it is shown only once:")
@@ -145,7 +149,9 @@ func newWalletImportCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			m := rs.flags.Mode()
 			return render.Result(cmd.OutOrStdout(), m, res, func(w io.Writer) {
 				render.Line(w, m, "wallet %q imported (%s) — %s", res.Name, res.WalletID, scopeLabel(res.Scope, res.Network))
-				_, _ = io.WriteString(w, res.Receive0+" "+res.Receive0Address+"\n")
+				if res.Receive0Address != "" {
+					_, _ = io.WriteString(w, res.Receive0+" "+res.Receive0Address+"\n")
+				}
 			})
 		},
 	}

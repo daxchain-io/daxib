@@ -24,9 +24,17 @@ type Options struct {
 	// the send/journal locks (<State>/locks). Empty defaults to <data-dir>/state via
 	// stateDir(); the journal opens lazily (no dirs until the first send).
 	State string
-	// Network is the active network name (mainnet/testnet/signet/regtest); ""
-	// defaults to mainnet.
+	// Network is the active network name (mainnet/testnet/testnet4/signet/regtest)
+	// AFTER the host applied --network > DAXIB_NETWORK. "" means neither was set —
+	// the service then consults the persisted default (config defaults.network); if
+	// that is empty too, the network is UNRESOLVED and network-requiring ops fail
+	// with usage.network_required. There is NO silent default to mainnet.
 	Network string
+	// NetworkSource records which of flag/env supplied a non-empty Network, for
+	// `network show` (one of "flag" or "env"; "" when Network is empty). The service
+	// overrides it to "config" when it resolves the persisted default, or "unset"
+	// when nothing resolves.
+	NetworkSource string
 	// Wallet is the active-wallet override (--wallet > DAXIB_WALLET).
 	Wallet string
 	// Backend is the active-backend override (--backend > DAXIB_BACKEND); ""

@@ -32,7 +32,9 @@ func execCLI(t *testing.T, args ...string) (stdout, stderr string, code int) {
 	root.SetOut(&outBuf)
 	root.SetErr(&errBuf)
 	err := root.ExecuteContext(ctx)
-	code = mapError(&errBuf, rs.flags.Mode(), err)
+	// Mirror Execute's ECC-3 funnel: effectiveMode honors --json even when Cobra never
+	// bound the persistent flag (an unknown top-level command fails before parsing).
+	code = mapError(&errBuf, effectiveMode(rs.flags.Mode(), args), err)
 	return outBuf.String(), errBuf.String(), code
 }
 
@@ -54,8 +56,11 @@ func isolateKeystore(t *testing.T) string {
 	t.Setenv("DAXIB_PASSPHRASE", "unit-test-passphrase-123")
 	t.Setenv("DAXIB_PASSPHRASE_CONFIRM", "unit-test-passphrase-123")
 	t.Setenv("DAXIB_KDF_LIGHT", "1")
-	// Ensure no inherited network/wallet env leaks into the test.
-	t.Setenv("DAXIB_NETWORK", "")
+	// Pin an EXPLICIT network so network-requiring ops resolve (AF-1: there is no
+	// silent default — an unset network now fails with usage.network_required). The
+	// historical default these tests were written against was mainnet, so pin that;
+	// tests that exercise the UNSET path override DAXIB_NETWORK to "" themselves.
+	t.Setenv("DAXIB_NETWORK", "mainnet")
 	t.Setenv("DAXIB_WALLET", "")
 	return ks
 }

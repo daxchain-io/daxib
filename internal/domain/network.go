@@ -25,15 +25,16 @@ const (
 	NetworkRegtest Network = "regtest"
 )
 
-// DefaultNetwork is the network used when none is selected by flag/env.
-const DefaultNetwork = NetworkMainnet
-
 // ParseNetwork validates a network name and returns the canonical Network. An
-// empty string maps to DefaultNetwork (mainnet). An unknown name is a usage error.
+// empty string stays empty — the UNRESOLVED sentinel — and is NOT an error here
+// (it is never silently coerced to a network; the service guards network-requiring
+// ops with usage.network_required when it sees ""). An unknown name is a usage
+// error. There is deliberately NO default network: nothing here resolves "" to
+// mainnet (or any net) — the OWNER decision is no silent default anywhere.
 func ParseNetwork(s string) (Network, error) {
 	switch s {
 	case "":
-		return DefaultNetwork, nil
+		return "", nil
 	case string(NetworkMainnet):
 		return NetworkMainnet, nil
 	case string(NetworkTestnet):

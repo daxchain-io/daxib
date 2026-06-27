@@ -104,6 +104,78 @@ func mnemonicCeremony(out io.Writer, in io.Reader, yes, jsonMode bool, mnemonic,
 	return mnemonicDisplay{echoInResult: false}, nil
 }
 
+// txConfirm is the human-readable summary of a money-moving op shown at the y/N
+// confirmation prompt (AF-3). Every field is a display string the CLI already holds
+// from flags — no float, no secret. Empty fields are omitted from the prompt so a
+// speedup/cancel (which has no fixed amount/recipient yet) reads cleanly.
+type txConfirm struct {
+	Action    string // "Send" | "Speed up" | "Cancel"
+	Recipient string // --to (send); the original txid (speedup/cancel)
+	Amount    string // --amount as typed (send only)
+	Fee       string // --fee-rate "<n> sat/vByte" or "--speed <tier>" or "backend fast estimate"
+	Network   string // resolved network label, or "(default)" when unresolved at flag/env time
+}
+
+// confirmTxSend is the AF-3 interactive guard for the money-moving ops (tx
+// send/speedup/cancel). It is factored out of the commands so it is unit-testable:
+// the caller passes whether stdin is a TTY, the --yes flag, the streams, and the
+// summary. Behavior:
+//
+//   - --yes: skip the prompt, authorize (proceed=true). (--yes is the documented
+//     "skip confirmations" escape — now honest, because there IS a prompt to skip.)
+//   - interactive (TTY) without --yes: print the summary + a "Proceed? [y/N]" prompt;
+//     proceed ONLY on an explicit yes/y (case-insensitive). Anything else aborts with
+//     usage.confirmation_required (the operator declined).
+//   - non-TTY without --yes: do NOT prompt (there is no TTY to read) — return
+//     proceed=false with NO error, leaving the service's existing
+//     usage.confirmation_required gate to fire (the historical contract is preserved:
+//     a non-interactive money mover must pass --yes).
+//
+// proceed=true means "go ahead and call the service" (and pass Yes=true, since the
+// operator has now confirmed). proceed=false with a nil error is the non-TTY pass-
+// through; proceed=false with an error is an explicit decline.
+func confirmTxSend(out io.Writer, in io.Reader, isTTY, yes bool, c txConfirm) (proceed bool, err error) {
+	if yes {
+		return true, nil
+	}
+	if !isTTY {
+		// No TTY to prompt at: defer to the service's confirmation_required gate.
+		return false, nil
+	}
+	if in == nil {
+		in = os.Stdin
+	}
+
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Confirm this transaction:")
+	if c.Action != "" {
+		_, _ = fmt.Fprintf(out, "  action:    %s\n", c.Action)
+	}
+	if c.Recipient != "" {
+		_, _ = fmt.Fprintf(out, "  recipient: %s\n", c.Recipient)
+	}
+	if c.Amount != "" {
+		_, _ = fmt.Fprintf(out, "  amount:    %s\n", c.Amount)
+	}
+	if c.Fee != "" {
+		_, _ = fmt.Fprintf(out, "  fee:       %s\n", c.Fee)
+	}
+	if c.Network != "" {
+		_, _ = fmt.Fprintf(out, "  network:   %s\n", c.Network)
+	}
+	_, _ = fmt.Fprint(out, "Proceed? [y/N] ")
+
+	reader := bufio.NewReader(in)
+	line, _ := reader.ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true, nil
+	default:
+		return false, domain.New("usage.confirmation_required",
+			"aborted at the confirmation prompt (answer 'y' to proceed, or pass --yes to skip the prompt)")
+	}
+}
+
 // twoDistinctPositions returns two distinct random indices in [0, n) (n must be
 // >= 2). Uses crypto/rand so the verification positions are unpredictable.
 func twoDistinctPositions(n int) (int, int, error) {

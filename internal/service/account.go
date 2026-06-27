@@ -76,6 +76,12 @@ func (s *Service) AddressList(ctx context.Context, req domain.AddressListRequest
 // wallet ShowWallet renders the bound network into Network, so a mismatch is
 // w.Network != s.net.
 func (s *Service) assertWalletNetwork(ctx context.Context, wallet string) error {
+	// A wallet op is rendered/derived against the active network; with none resolved
+	// fail with usage.network_required before loading the wallet meta against "". This
+	// is the shared gate for address new/list, balance, and utxo list.
+	if err := s.requireNetwork(); err != nil {
+		return err
+	}
 	w, err := s.keys.ShowWallet(ctx, wallet, s.net)
 	if err != nil {
 		return err

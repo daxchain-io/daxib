@@ -147,15 +147,12 @@ func TestTxHelpListsSubcommands(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("tx --help exit=%d, want 0", code)
 	}
-	// send/status/wait/list plus the RBF commands speedup/cancel (BIP-125).
-	for _, sub := range []string{"send", "speedup", "cancel", "status", "wait", "list"} {
+	// send/status/wait/list plus the RBF commands speedup/cancel (BIP-125) and the
+	// GAP-1 operator recovery `abandon`.
+	for _, sub := range []string{"send", "speedup", "cancel", "status", "wait", "list", "abandon"} {
 		if !strings.Contains(stdout, sub) {
 			t.Errorf("tx --help missing subcommand %q:\n%s", sub, stdout)
 		}
-	}
-	// `abandon` is an out-of-scope forward-path command — it must NOT appear.
-	if strings.Contains(stdout, "abandon") {
-		t.Errorf("tx --help leaks the out-of-scope `abandon` command:\n%s", stdout)
 	}
 }
 

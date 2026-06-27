@@ -180,6 +180,14 @@ func (s *Service) PolicyDeny(ctx context.Context, in PolicyPinInput) (PolicyMuta
 }
 
 func (s *Service) pinMutation(ctx context.Context, in PolicyPinInput, allow bool) (PolicyMutationResult, error) {
+	// Pins are per-network (validated + sealed against the active family). Guard up
+	// front so resolveDestination/validateAddress never run against a silently-defaulted
+	// network (chainParams("")->MainNetParams). openPolicyEngine guards too, but it runs
+	// AFTER validateAddress, so an unguarded pin would otherwise render the bad_address
+	// message against a defaulted network. Fail closed with usage.network_required.
+	if err := s.requireNetwork(); err != nil {
+		return PolicyMutationResult{}, err
+	}
 	// Resolve a contact NAME to its pinned address first (a raw address falls
 	// through unchanged), so `policy allow <contact-name>` pins the same address a
 	// `tx send --to <contact-name>` would pay. A --remove by name resolves the same
@@ -238,11 +246,29 @@ func (s *Service) PolicyReset(ctx context.Context, in PolicyAdminInput) (PolicyM
 	return s.landAnchor(ctx, anchor, in.AnchorOut)
 }
 
-// PolicyChangeAdminPassphrase rotates the admin passphrase (re-seal under a new key).
+// PolicyChangeAdminPassphrase rotates the admin passphrase via the SI-1 crash-safe
+// staged protocol. It drives the three engine phases, landing the anchor between
+// them so a crash at ANY point leaves policy.json verifiable (under the OLD or NEW
+// key) and the guardrails intact:
+//
+//	STAGE   : land the dual-key anchor (OLD + staged NEW). The commit point — once on
+//	          disk, recovery rolls forward/back. policy.json still verifies (under OLD).
+//	RESEAL  : reseal policy.json under the NEW key (policy.json first; anchor unchanged).
+//	PROMOTE : land the final single-NEW-key anchor.
+//
+// A crash before STAGE lands rolls back (no anchor change). A crash after STAGE but
+// before RESEAL is rolled BACK by recovery (policy.json still under OLD). A crash
+// after RESEAL is rolled FORWARD by recovery (policy.json under NEW ⇒ promote). The
+// limits are never wiped.
 func (s *Service) PolicyChangeAdminPassphrase(ctx context.Context, in PolicyRotateInput) (PolicyMutationResult, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return PolicyMutationResult{}, err
+	}
+	// Converge any prior interrupted rotation FIRST so we never stack a new rotation on
+	// a staged anchor (mirrors the keystore rotation's recover-first discipline).
+	if rerr := s.recoverPolicyRotation(ctx, eng); rerr != nil {
+		return PolicyMutationResult{}, rerr
 	}
 	cur, perr := s.acquireAdminPassphrase(in.AdminStdin, in.AdminFile)
 	if perr != nil {
@@ -254,11 +280,67 @@ func (s *Service) PolicyChangeAdminPassphrase(ctx context.Context, in PolicyRota
 		return PolicyMutationResult{}, nerr
 	}
 	defer next.Zero()
-	anchor, rerr := eng.ChangeAdminPassphrase(cur, next)
-	if rerr != nil {
+
+	// ── STAGE ──: land the dual-key anchor (the commit point).
+	staged, serr := eng.StageAdminRotation(cur, next)
+	if serr != nil {
+		return PolicyMutationResult{}, serr
+	}
+	if werr := s.writeAnchor(ctx, staged); werr != nil {
+		// A read-only config mount cannot land the staged anchor: the rotation has NOT
+		// committed (policy.json is untouched, still under OLD). Surface the typed error
+		// rather than reseal into an unverifiable state.
+		return PolicyMutationResult{}, werr
+	}
+	if ferr := firePolicyRotationFault("after_stage"); ferr != nil {
+		return PolicyMutationResult{}, ferr
+	}
+
+	// ── RESEAL ──: reseal policy.json under the NEW key.
+	if rerr := eng.ResealUnderStagedRotation(next); rerr != nil {
 		return PolicyMutationResult{}, rerr
 	}
-	return s.landAnchor(ctx, anchor, in.AnchorOut)
+	if ferr := firePolicyRotationFault("after_reseal"); ferr != nil {
+		return PolicyMutationResult{}, ferr
+	}
+
+	// ── PROMOTE ──: land the final single-key anchor.
+	promoted, perr2 := eng.PromoteAdminRotation()
+	if perr2 != nil {
+		return PolicyMutationResult{}, perr2
+	}
+	res, lerr := s.landAnchor(ctx, promoted, in.AnchorOut)
+	if lerr != nil {
+		return PolicyMutationResult{}, lerr
+	}
+	if ferr := firePolicyRotationFault("after_promote"); ferr != nil {
+		return PolicyMutationResult{}, ferr
+	}
+	return res, nil
+}
+
+// PolicyRelease frees a STUCK pre-signature spend reservation (`policy release
+// <id>`, GAP-4). It is admin-gated (the engine authenticates the admin passphrase
+// against the pinned verify key) and REFUSES a committed reservation — only a stuck
+// pending reservation is releasable. No anchor is mutated (the sealed body is
+// untouched), so there is no anchor to land.
+func (s *Service) PolicyRelease(ctx context.Context, in PolicyReleaseInput) (PolicyReleaseResult, error) {
+	if in.ReservationID == "" {
+		return PolicyReleaseResult{}, domain.New(domain.CodeUsage+".missing_arg", "a reservation id is required")
+	}
+	eng, err := s.openPolicyEngine(ctx)
+	if err != nil {
+		return PolicyReleaseResult{}, err
+	}
+	pass, perr := s.acquireAdminPassphrase(in.AdminStdin, in.AdminFile)
+	if perr != nil {
+		return PolicyReleaseResult{}, perr
+	}
+	defer pass.Zero()
+	if rerr := eng.ReleaseReservation(ctx, pass, string(s.net), in.ReservationID); rerr != nil {
+		return PolicyReleaseResult{}, rerr
+	}
+	return PolicyReleaseResult{ReservationID: in.ReservationID, Network: string(s.net), Released: true}, nil
 }
 
 // landAnchor writes the anchor to the config dir, or — on a read-only mount — emits

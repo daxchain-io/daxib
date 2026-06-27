@@ -58,8 +58,12 @@ func TestMcpToolsJSONCount(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
 		t.Fatalf("mcp tools --json is not valid JSON: %v\n%s", err, stdout)
 	}
-	if len(payload.Tools) != 13 {
-		t.Fatalf("mcp tools --json has %d tools, want 13 (§6.1)", len(payload.Tools))
+	// The §6.1 surface is 18 tools after GAP-2 added tx_speedup, tx_cancel,
+	// sign_message, verify, and convert. The authoritative roster is
+	// internal/mcpserver/tools.ToolNames (the cli may not import it across the arch
+	// lattice); the golden test there pins the full set.
+	if len(payload.Tools) != 18 {
+		t.Fatalf("mcp tools --json has %d tools, want 18 (§6.1)", len(payload.Tools))
 	}
 	for _, tl := range payload.Tools {
 		if tl.Name == "" || len(tl.InputSchema) == 0 || len(tl.OutputSchema) == 0 {

@@ -39,7 +39,48 @@ func newPolicyCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newPolicyResetCmd(ctx, rs),
 		newPolicyPinCmd(ctx, rs),
 		newPolicyChangeAdminCmd(ctx, rs),
+		newPolicyReleaseCmd(ctx, rs),
 	)
+	return cmd
+}
+
+// newPolicyReleaseCmd builds `policy release <reservation-id>` (GAP-4): the
+// admin-gated release of a STUCK pre-signature spend reservation (reserved →
+// released), so a crash that stranded a reservation does not consume the rolling-24h
+// budget forever. It REFUSES a committed reservation (only a pending one is
+// releasable) and requires --yes (it mutates the spend ledger).
+func newPolicyReleaseCmd(ctx context.Context, rs *rootState) *cobra.Command {
+	var af adminFlags
+	cmd := &cobra.Command{
+		Use:   "release <reservation-id>",
+		Short: "Release a stuck pending spend reservation (admin passphrase; refuses a committed one)",
+		Long: "Release frees a STUCK pre-signature spend reservation so a crash between\n" +
+			"reserve and settle does not strand the rolling-24h budget. It is admin-gated and\n" +
+			"refuses a COMMITTED reservation (whose spend reached the chain) — only a pending\n" +
+			"reservation is releasable. Requires --yes (it mutates the spend ledger).",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !rs.flags.Yes {
+				return domain.New(domain.CodeUsageConfirmRequired, "releasing a reservation mutates the spend ledger; pass --yes to authorize")
+			}
+			svc, closeFn, err := openService(ctx, rs)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+			res, err := svc.PolicyRelease(cmd.Context(), service.PolicyReleaseInput{
+				ReservationID: args[0], AdminStdin: af.stdin, AdminFile: af.file,
+			})
+			if err != nil {
+				return err
+			}
+			m := rs.flags.Mode()
+			return render.Result(cmd.OutOrStdout(), m, res, func(w io.Writer) {
+				render.Line(w, m, "released reservation %s on %s", res.ReservationID, res.Network)
+			})
+		},
+	}
+	af.bind(cmd)
 	return cmd
 }
 

@@ -100,6 +100,9 @@ func TestSelfAddressesRefreshedOnMutation(t *testing.T) {
 	}
 }
 
+// TestChangeAdminPassphraseReseals drives the staged rotation (stage → reseal →
+// promote) end-to-end at the engine level: the OLD passphrase stops authenticating,
+// the NEW reseals verifiably, and a follow-up mutation under NEW takes.
 func TestChangeAdminPassphraseReseals(t *testing.T) {
 	eng, _ := testEngine(t, "old-admin", nil)
 	setLimits(t, eng, "old-admin", &Limits{MaxTxSat: satPtr("777")})
@@ -108,12 +111,23 @@ func TestChangeAdminPassphraseReseals(t *testing.T) {
 	next := secret.NewString("new-admin")
 	defer cur.Zero()
 	defer next.Zero()
-	newAnchor, err := eng.ChangeAdminPassphrase(cur, next)
+
+	staged, err := eng.StageAdminRotation(cur, next)
 	if err != nil {
-		t.Fatalf("rotate: %v", err)
+		t.Fatalf("stage: %v", err)
 	}
-	if newAnchor.VerifyKey == "" {
-		t.Fatal("rotation must produce a new verify key")
+	if staged.VerifyKeyNext == "" {
+		t.Fatal("stage must produce a staged verify key")
+	}
+	if rerr := eng.ResealUnderStagedRotation(secret.NewString("new-admin")); rerr != nil {
+		t.Fatalf("reseal: %v", rerr)
+	}
+	newAnchor, perr := eng.PromoteAdminRotation()
+	if perr != nil {
+		t.Fatalf("promote: %v", perr)
+	}
+	if newAnchor.VerifyKey == "" || newAnchor.VerifyKeyNext != "" {
+		t.Fatalf("promoted anchor must be single-key: %+v", newAnchor)
 	}
 
 	// The OLD passphrase no longer authenticates.

@@ -60,3 +60,36 @@ func mapError(stderr io.Writer, m render.Mode, err error) int {
 // errors → USAGE there). Returning the error unchanged keeps Cobra from printing
 // it (SilenceErrors) while letting the funnel render it.
 func flagErrorFunc(_ *cobra.Command, err error) error { return err }
+
+// effectiveMode resolves the render mode for the error funnel, accounting for the
+// case where Cobra never bound the persistent --json flag (ECC-3): an UNKNOWN
+// top-level command (or a flag-parse failure before command resolution) returns
+// its error WITHOUT --json having been parsed into rs.flags, so the funnel would
+// fall back to the HUMAN error line and break the agent's stderr-as-JSON contract.
+// We pre-scan argv so `daxib bogus --json` and `daxib --json bogus` BOTH emit the
+// {"error":{…}} envelope. The scan only ever ENABLES json (it never overrides a
+// parsed --json=true), so a successful parse keeps rs.flags authoritative.
+func effectiveMode(base render.Mode, args []string) render.Mode {
+	if !base.JSON && argvHasJSON(args) {
+		base.JSON = true
+	}
+	return base
+}
+
+// argvHasJSON reports whether the raw args request --json output, honoring the "--"
+// end-of-flags terminator (a "--json" AFTER a bare "--" is a positional, not the
+// flag). It matches "--json" and "--json=true"; "--json=false" explicitly disables.
+func argvHasJSON(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false // everything after "--" is positional, not a flag
+		}
+		if a == "--json" || a == "--json=true" {
+			return true
+		}
+		if a == "--json=false" {
+			return false
+		}
+	}
+	return false
+}

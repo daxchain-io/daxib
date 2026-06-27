@@ -151,6 +151,7 @@ const (
 	CodeTxBroadcastRejected  = "tx.broadcast_rejected"       // a permanent network reject (exit 6)
 	CodeTxFeeTooLow          = "tx.fee_too_low"              //nolint:gosec // G101: dotted error-code string // min-relay/mempool-min reject (exit 6)
 	CodeTxInputSpent         = "tx.input_spent"              // bad-txns-inputs-missingorspent (exit 9, retryable: re-select)
+	CodeTxAlreadyBroadcast   = "tx.already_broadcast"        // `tx abandon` refused a tx with a recorded broadcast (exit 9)
 	CodeTxWaitTimeout        = "tx.wait_timeout"             // a --wait deadline hit with the tx still pending (exit 8, retryable)
 	CodeStateLockTimeout     = "state.lock_timeout"          // flock contention (exit 11)
 	CodeStateCorrupt         = "state.corrupt"               // unrecoverable state file (exit 11)
@@ -161,6 +162,13 @@ const (
 	// a ref that names no keystore address — all usage-class (exit 2).
 	CodeMessageRequired = "usage.message_required" //nolint:gosec // G101: dotted error-code string, not a credential
 	CodeBadSignature    = "usage.bad_signature"    //nolint:gosec // G101: dotted error-code string, not a credential
+
+	// CodeNetworkRequired is raised when a network-specific op runs with no network
+	// resolved (--network > DAXIB_NETWORK > config defaults.network all empty). It is
+	// a usage failure (exit 2): the operator must SELECT a network — daxib never
+	// silently defaults to mainnet (or any net). The OWNER decision: no silent
+	// default anywhere.
+	CodeNetworkRequired = "usage.network_required"
 )
 
 // codeExit is the (prefix -> exit) registry, highest-specificity wins. The key
@@ -211,10 +219,22 @@ var codeExit = map[string]ExitCode{
 	// a successful verify with valid=false, exit 0.)
 	"usage.message_required": ExitUsage,
 	"usage.bad_signature":    ExitUsage,
+	// No network resolved (--network / DAXIB_NETWORK / config defaults.network all
+	// empty) for a network-specific op — the operator must select one; daxib never
+	// silently defaults (exit 2).
+	"usage.network_required": ExitUsage,
 
 	// 3 — POLICY_DENIED (covers all policy.denied.* via the prefix rule:
 	// spend limit, destination allowlist, protected-UTXO refusal, coin-control).
 	"policy.denied": ExitPolicyDenied,
+	// The fee-rate-cap denial is the ONE policy.denied.* that maps to exit 7
+	// (FEE_POLICY_DENIED, the anti-fee-burn lane), NOT exit 3 — a longer-prefix
+	// override that beats the "policy.denied" key above. It is retryable=true (the
+	// fee market moves, so a later estimate may clear the cap), unlike the other
+	// policy.denied.* refusals (a spend-limit/allowlist denial is exit 3,
+	// retryable=false). The dotted code stays stable (the engine still emits
+	// policy.denied.fee_rate); only the exit/retryable projection differs (ECC-2).
+	"policy.denied.fee_rate": ExitFeePolicyDenied,
 
 	// 4 — AUTH (the "wrong/MISSING/unusable keystore OR admin passphrase" class)
 	"keystore.bad_passphrase":      ExitAuth,
@@ -248,8 +268,10 @@ var codeExit = map[string]ExitCode{
 	// retry with a higher --fee-rate (exit 6).
 	"tx.fee_too_low": ExitNetwork,
 
-	// 7 — FEE_POLICY_DENIED (anti-fee-burn: the computed fee/fee-rate exceeds the cap)
-	"policy.fee_cap": ExitFeePolicyDenied,
+	// 7 — FEE_POLICY_DENIED (anti-fee-burn: the computed fee-rate exceeds the cap).
+	// The live code is policy.denied.fee_rate (mapped above as a longer-prefix
+	// override of policy.denied → 3); there is no separate policy.fee_cap code (it
+	// was a dead, never-emitted entry removed in ECC-2).
 
 	// 8 — TIMEOUT_PENDING / SEAL. The policy SEAL class (the sealed-state integrity
 	// failures): a bad/absent seal, a nonce rollback, a corrupt durable counter, or
@@ -266,6 +288,11 @@ var codeExit = map[string]ExitCode{
 	"tx.input_spent":          ExitTxConflict, // bad-txns-inputs-missingorspent
 	"tx.replaced":             ExitTxConflict, // RBF target already resolved (confirmed/replaced)
 	"tx.replacement_rejected": ExitTxConflict,
+	// `tx abandon` refused: the tx has a recorded broadcast (broadcast/confirmed/
+	// replaced) so it MAY still confirm on-chain — abandoning it (releasing its inputs
+	// + budget) could double-spend a live payment. Only a never-broadcast `signed`
+	// record is abandonable (exit 9).
+	"tx.already_broadcast": ExitTxConflict,
 
 	// 10 — NOT_FOUND / READONLY
 	"ref.not_found":          ExitNotFound,
@@ -326,7 +353,7 @@ var retryableDefaults = map[string]bool{
 	"tx.fee_too_low":          true, // the fee market moves; a higher --fee-rate may clear it
 	"state.lock_timeout":      true, // contention; retry
 	"policy.denied.day_limit": true, // rolling-24h window ages out; the engine returns retry_after
-	"policy.fee_cap":          true, // the fee market moves; a later estimate may clear the cap
+	"policy.denied.fee_rate":  true, // the fee market moves; a later estimate may clear the fee-rate cap (ECC-2; exit 7)
 }
 
 // retryableFor returns the default Retryable hint for a code, using the same

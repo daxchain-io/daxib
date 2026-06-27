@@ -66,6 +66,14 @@ type PolicyRotateInput struct {
 	AnchorOut  string
 }
 
+// PolicyReleaseInput is `policy release <reservation-id>` (GAP-4): the admin-gated
+// release of a stuck pre-signature reservation.
+type PolicyReleaseInput struct {
+	ReservationID string
+	AdminStdin    bool
+	AdminFile     string
+}
+
 // hasChange reports whether a set input carries any limit/gate change to apply on
 // top of a bootstrap.
 func (in PolicySetInput) hasChange() bool {

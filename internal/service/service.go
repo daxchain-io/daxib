@@ -25,8 +25,13 @@ type Service struct {
 	secret  SecretIO
 	wallet  string         // active-wallet override (--wallet > DAXIB_WALLET)
 	backend string         // active-backend override (--backend > DAXIB_BACKEND)
-	net     domain.Network // active network (validated)
-	dial    func(ctx context.Context, o backend.Options) (backend.Client, error)
+	net     domain.Network // active network (validated); "" when UNRESOLVED (no silent default)
+	// netSource records WHERE net was resolved from, for `network show`. One of
+	// "flag", "env", "config", or "unset" (when net == ""). The flag/env split comes
+	// from Options.NetworkSource (the cli/mcp host already knows which it used);
+	// "config" / "unset" are decided here at Open.
+	netSource string
+	dial      func(ctx context.Context, o backend.Options) (backend.Client, error)
 
 	journal  *journal.Store  // the tx journal (state class); nil only if Open failed to bind it
 	contacts *contacts.Store // the local address book (state class); name->address resolution
@@ -45,6 +50,16 @@ func Open(ctx context.Context, opts Options) (*Service, error) {
 	net, err := domain.ParseNetwork(opts.Network)
 	if err != nil {
 		return nil, err
+	}
+	// netSource: the host (cli/mcp) tells us flag vs env via Options.NetworkSource
+	// when it supplied a non-empty Options.Network. When it did NOT (net == ""), we
+	// consult the persisted default (config defaults.network) as the THIRD rung of
+	// the ladder; if that is empty too, net stays "" (UNRESOLVED) and any
+	// network-requiring op fails with usage.network_required. No silent default to
+	// mainnet (or any net) ever happens.
+	netSource := opts.NetworkSource
+	if net == "" {
+		netSource = "unset"
 	}
 
 	ks, err := keys.Open(ctx, keys.Options{
@@ -65,6 +80,24 @@ func Open(ctx context.Context, opts Options) (*Service, error) {
 		cfg, err = config.Open(opts.Config)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Third rung of the network-resolution ladder: when no flag/env network was
+	// supplied, consult the PERSISTED default (config defaults.network, written by
+	// `daxib network use`). A bad persisted value is a usage error (it should never
+	// be malformed — `network use` / `config set` validate on write — but a
+	// hand-edited config.toml could carry garbage, and failing closed beats trusting
+	// it). Still empty ⇒ net stays "" (UNRESOLVED); no silent fallback.
+	if net == "" && cfg != nil {
+		if persisted, derr := cfg.DefaultNetwork(); derr != nil {
+			return nil, derr
+		} else if persisted != "" {
+			net, err = domain.ParseNetwork(persisted)
+			if err != nil {
+				return nil, err
+			}
+			netSource = "config"
 		}
 	}
 
@@ -91,18 +124,19 @@ func Open(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	svc := &Service{
-		opts:     opts,
-		keys:     ks,
-		cfg:      cfg,
-		clock:    clock,
-		secret:   opts.Secret,
-		wallet:   opts.Wallet,
-		backend:  opts.Backend,
-		net:      net,
-		dial:     dial,
-		journal:  j,
-		contacts: contactStore,
-		stateDir: sd,
+		opts:      opts,
+		keys:      ks,
+		cfg:       cfg,
+		clock:     clock,
+		secret:    opts.Secret,
+		wallet:    opts.Wallet,
+		backend:   opts.Backend,
+		net:       net,
+		netSource: netSource,
+		dial:      dial,
+		journal:   j,
+		contacts:  contactStore,
+		stateDir:  sd,
 	}
 
 	// Best-effort reconcile at open (never fails Open): leaves `signed` records for
@@ -156,4 +190,20 @@ func (s *Service) resolveWallet(ctx context.Context, explicit string) (string, e
 		return d, nil
 	}
 	return "", domain.New("wallet.not_found", "no wallet specified and no default wallet is set; pass --wallet <name> or create one")
+}
+
+// requireNetwork is the chokepoint guard for every network-specific op. When no
+// network resolved (--network > DAXIB_NETWORK > config defaults.network all empty),
+// s.net == "" and this returns a typed usage.network_required (exit 2) instead of
+// letting the op proceed against a silently-defaulted network. The OWNER decision
+// is NO silent default anywhere: an unqualified network-requiring command MUST
+// fail, telling the operator how to select one. Network-INDEPENDENT commands
+// (version, convert, completion, keystore info/change-passphrase, contacts,
+// agnostic `wallet create`) never call this.
+func (s *Service) requireNetwork() error {
+	if s.net == "" {
+		return domain.New(domain.CodeNetworkRequired,
+			"no network selected; pass --network <net>, set DAXIB_NETWORK, or run `daxib network use <net>`")
+	}
+	return nil
 }

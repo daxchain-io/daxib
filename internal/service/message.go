@@ -33,6 +33,13 @@ type MessageSignInput struct {
 // unlocks the address's key under the keystore passphrase and signs. The base64
 // witness is the signature.
 func (s *Service) MessageSign(ctx context.Context, req domain.MessageSignRequest, in MessageSignInput) (domain.MessageSignResult, error) {
+	// sign message derives + renders the signing address PER NETWORK (and the bare-
+	// address ref is resolved family-locally for s.net), so it requires a resolved
+	// network. Guard first — before the wallet-scope check and ref resolution — so an
+	// unqualified sign fails with usage.network_required, not a misleading not_found.
+	if err := s.requireNetwork(); err != nil {
+		return domain.MessageSignResult{}, err
+	}
 	// Gate sign message under the scope guard like every other key op, BEFORE
 	// resolving the ref: a BOUND wallet refuses signing off its locked network
 	// (usage.network_mismatch, exit 2), an AGNOSTIC wallet is unaffected. We must
@@ -76,6 +83,15 @@ func (s *Service) MessageSign(ctx context.Context, req domain.MessageSignRequest
 // it returns Valid=false with a nil error (exit 0), so an agent branches on the
 // field. A malformed address or undecodable base64/witness is a usage error.
 func (s *Service) MessageVerify(ctx context.Context, req domain.MessageVerifyRequest) (domain.MessageVerifyResult, error) {
+	// verify validates the address AND interprets the BIP-322 witness PER NETWORK
+	// (chainParams + bip322.Verify both key off s.net). With no network resolved
+	// chainParams() would silently fall through to MainNetParams — a silent mainnet
+	// default on an MCP-exposed tool. Guard FIRST so an unqualified verify fails with
+	// usage.network_required (matching its sibling MessageSign), not a misleading
+	// bad_address rendered against a defaulted network.
+	if err := s.requireNetwork(); err != nil {
+		return domain.MessageVerifyResult{}, err
+	}
 	if req.Address == "" {
 		return domain.MessageVerifyResult{}, domain.New(domain.CodeUsageBadAddress, "--address is required for verify")
 	}

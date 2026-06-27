@@ -46,6 +46,13 @@ func (s *Service) WalletCreate(ctx context.Context, req domain.WalletCreateReque
 	if err != nil {
 		return domain.WalletCreateResult{}, err
 	}
+	// A --bind create LOCKS the wallet to one network, so it REQUIRES a resolved
+	// network (no silent default). An agnostic create (no --bind) may proceed with
+	// network == "" — it materializes both coin_type chains and renders no
+	// per-network sample address.
+	if req.Bind && network == "" {
+		return domain.WalletCreateResult{}, s.requireNetwork()
+	}
 
 	pass, _, err := s.acquire(passphraseSpec(in.PassphraseStdin, in.PassphraseFile, false))
 	if err != nil {
@@ -72,11 +79,16 @@ func (s *Service) WalletCreate(ctx context.Context, req domain.WalletCreateReque
 		Scope:           res.Scope,
 		Network:         res.Network,
 		PathPrefix:      res.PathPrefix,
-		Receive0:        req.Name + "/0/0",
 		Receive0Address: res.Receive0Address,
 		AccountXpub:     res.AccountXpub,
 		Mnemonic:        string(res.Mnemonic.Reveal()),
 		Sensitive:       true,
+	}
+	// Only surface the 0/0 receive ref when a per-network sample address was rendered
+	// (an agnostic create with no resolved network has no display address — see
+	// keys.materializeWallet — and we render no receive line for it).
+	if res.Receive0Address != "" {
+		out.Receive0 = req.Name + "/0/0"
 	}
 	if res.BIP39Pass != nil && res.BIP39Pass.Len() > 0 {
 		out.BIP39Passphrase = string(res.BIP39Pass.Reveal())
@@ -91,6 +103,11 @@ func (s *Service) WalletImport(ctx context.Context, req domain.WalletImportReque
 	network, err := s.walletNetwork(req.Network)
 	if err != nil {
 		return domain.WalletImportResult{}, err
+	}
+	// A --bind import LOCKS the wallet to one network, so it REQUIRES a resolved
+	// network (no silent default). An agnostic import may proceed with network == "".
+	if req.Bind && network == "" {
+		return domain.WalletImportResult{}, s.requireNetwork()
 	}
 
 	stdinTaken := in.MnemonicStdin
@@ -140,20 +157,30 @@ func (s *Service) WalletImport(ctx context.Context, req domain.WalletImportReque
 	}
 	defer res.BIP39Pass.Zero()
 
-	return domain.WalletImportResult{
+	out := domain.WalletImportResult{
 		Name:            req.Name,
 		WalletID:        res.WalletID,
 		Scope:           res.Scope,
 		Network:         res.Network,
 		PathPrefix:      res.PathPrefix,
-		Receive0:        req.Name + "/0/0",
 		Receive0Address: res.Receive0Address,
 		AccountXpub:     res.AccountXpub,
-	}, nil
+	}
+	// Only surface the 0/0 receive ref when a per-network sample address exists (an
+	// agnostic import with no resolved network has none).
+	if res.Receive0Address != "" {
+		out.Receive0 = req.Name + "/0/0"
+	}
+	return out, nil
 }
 
 // WalletList returns every wallet's summary.
 func (s *Service) WalletList(ctx context.Context, _ domain.WalletListRequest) (domain.WalletListResult, error) {
+	// wallet list renders each wallet's sample address PER NETWORK, so it requires a
+	// resolved network (no silent default).
+	if err := s.requireNetwork(); err != nil {
+		return domain.WalletListResult{}, err
+	}
 	wallets, err := s.keys.ListWallets(ctx, s.net)
 	if err != nil {
 		return domain.WalletListResult{}, err
@@ -179,6 +206,11 @@ func (s *Service) WalletList(ctx context.Context, _ domain.WalletListRequest) (d
 
 // WalletShow returns one wallet's detail.
 func (s *Service) WalletShow(ctx context.Context, req domain.WalletShowRequest) (domain.WalletShowResult, error) {
+	// wallet show renders per-network (sample addresses, next-index addresses), so it
+	// requires a resolved network (no silent default).
+	if err := s.requireNetwork(); err != nil {
+		return domain.WalletShowResult{}, err
+	}
 	w, err := s.keys.ShowWallet(ctx, req.Name, s.net)
 	if err != nil {
 		return domain.WalletShowResult{}, err

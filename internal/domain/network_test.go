@@ -11,7 +11,7 @@ func TestParseNetwork(t *testing.T) {
 		want    Network
 		wantErr bool
 	}{
-		{"", NetworkMainnet, false},
+		{"", "", false}, // empty stays the UNRESOLVED sentinel — NO silent default
 		{"mainnet", NetworkMainnet, false},
 		{"testnet", NetworkTestnet, false},
 		{"testnet4", NetworkTestnet4, false},

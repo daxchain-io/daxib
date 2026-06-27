@@ -146,7 +146,7 @@ type WalletUpgradeResult struct {
 // AddressNewRequest is the wire input for `address new`. Change selects the
 // internal (branch 1) chain; default is receive (branch 0).
 type AddressNewRequest struct {
-	Wallet string `json:"wallet"`
+	Wallet string `json:"wallet,omitempty"` // optional: empty selects the default wallet (matches the CLI default-wallet path)
 	Change bool   `json:"change,omitempty"`
 }
 
@@ -164,7 +164,7 @@ type AddressNewResult struct {
 
 // AddressListRequest is the wire input for `address list`.
 type AddressListRequest struct {
-	Wallet string `json:"wallet"`
+	Wallet string `json:"wallet,omitempty"` // optional: empty selects the default wallet (matches the CLI default-wallet path)
 }
 
 // AddressSummary is one row of `address list`.

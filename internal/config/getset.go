@@ -19,6 +19,12 @@ import (
 //
 // The dotted key grammar:
 //
+//   defaults.network                     → the PERSISTED active-network default, the
+//                                          third rung of the resolution ladder
+//                                          (--network > DAXIB_NETWORK > this > error).
+//                                          One of the five well-known networks; ""
+//                                          clears it (back to unresolved). Written by
+//                                          `daxib network use <net>`.
 //   networks.<network>.default-backend   → the endpoint name dialed for <network>
 //                                          when no --backend/DAXIB_BACKEND override
 //                                          is given ("" = none configured).
@@ -39,6 +45,12 @@ type KV struct {
 // `config list` enumerates. It mirrors domain's five well-known networks.
 var listNetworks = []string{"mainnet", "testnet", "testnet4", "signet", "regtest"}
 
+// defaultsNetworkKey is the dotted key for the PERSISTED active-network default —
+// the third rung of the network-resolution ladder. Its value is validated by
+// domain.ParseNetwork (one of the five well-known networks); an empty value clears
+// it (back to unresolved).
+const defaultsNetworkKey = "defaults.network"
+
 // defaultBackendKey is the dotted key for a network's default backend.
 func defaultBackendKey(network string) string {
 	return "networks." + network + ".default-backend"
@@ -53,7 +65,17 @@ func (s *Store) ListKeys() ([]KV, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]KV, 0, len(listNetworks))
+	out := make([]KV, 0, len(listNetworks)+1)
+	// The operator-wide persisted active-network default (the third rung of the
+	// network-resolution ladder).
+	{
+		val := f.Defaults.Network
+		src := "default"
+		if val != "" {
+			src = "file"
+		}
+		out = append(out, KV{Key: defaultsNetworkKey, Value: val, Source: src})
+	}
 	for _, net := range listNetworks {
 		val := f.Networks[net].DefaultBackend
 		src := "default"
@@ -74,6 +96,13 @@ func (s *Store) GetKey(key string) (string, error) {
 		return "", domain.Newf(domain.CodeUsage+".policy_key",
 			"%q is a policy key — inspect it with `daxib policy show`, not `config get`", key)
 	}
+	if key == defaultsNetworkKey {
+		f, err := s.load()
+		if err != nil {
+			return "", err
+		}
+		return f.Defaults.Network, nil
+	}
 	network, ok := parseDefaultBackendKey(key)
 	if !ok {
 		return "", domain.Newf(domain.CodeRefNotFound, "unknown config key %q", key)
@@ -81,7 +110,8 @@ func (s *Store) GetKey(key string) (string, error) {
 	// Validate the network the same way SetKey does so get and set agree: a
 	// well-shaped key naming a non-existent network is ref.not_found (exit 10), not a
 	// silent empty value with exit 0 (CFG-GET-1). parseDefaultBackendKey already
-	// rejects an empty mid, so ParseNetwork's ""→mainnet mapping cannot reach here.
+	// rejects an empty mid, so ParseNetwork's empty-is-unresolved case cannot reach
+	// here (a non-empty unknown name is the usage.network error we project below).
 	if _, perr := domain.ParseNetwork(network); perr != nil {
 		return "", domain.Newf(domain.CodeRefNotFound, "unknown config key %q", key)
 	}
@@ -102,6 +132,23 @@ func (s *Store) SetKey(ctx context.Context, key, value string) error {
 	if isPolicyKey(key) {
 		return domain.Newf(domain.CodeUsage+".policy_key",
 			"%q is a policy key — set it with `daxib policy`, not `config set` (the sealed anchor carve-out)", key)
+	}
+	if key == defaultsNetworkKey {
+		// The persisted active-network default. A non-empty value must be one of the
+		// five well-known networks (validated by ParseNetwork); an empty value CLEARS
+		// it (back to the unresolved sentinel). ParseNetwork("") returns "" with no
+		// error, so the clear path and the explicit "" both land as "".
+		val := strings.TrimSpace(value)
+		if val != "" {
+			if _, perr := domain.ParseNetwork(val); perr != nil {
+				return domain.Newf(domain.CodeUsage+".bad_value",
+					"cannot set %s = %q: %s", key, val, perr.(*domain.Error).Msg)
+			}
+		}
+		return s.mutate(ctx, func(f *File) error {
+			f.Defaults.Network = val
+			return nil
+		})
 	}
 	network, ok := parseDefaultBackendKey(key)
 	if !ok {

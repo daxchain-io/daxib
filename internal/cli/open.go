@@ -37,11 +37,19 @@ func buildServiceOptions(rs *rootState) service.Options {
 		}
 	}
 
+	// Network resolution rungs 1+2 (flag > env). The persisted default (config
+	// defaults.network) is rung 3, resolved in the service (it owns the config
+	// store, which the cli may not import). When neither flag nor env is set, network
+	// stays "" and netSource "" — the service then tries the persisted default and,
+	// failing that, leaves the network UNRESOLVED so network-requiring ops fail with
+	// usage.network_required. NO silent default to mainnet.
 	network := rs.flags.Network
-	if network == "" {
-		if v, ok := os.LookupEnv("DAXIB_NETWORK"); ok && v != "" {
-			network = v
-		}
+	netSource := ""
+	if network != "" {
+		netSource = "flag"
+	} else if v, ok := os.LookupEnv("DAXIB_NETWORK"); ok && v != "" {
+		network = v
+		netSource = "env"
 	}
 
 	wallet := rs.flags.Wallet
@@ -84,14 +92,15 @@ func buildServiceOptions(rs *rootState) service.Options {
 	_, light := os.LookupEnv("DAXIB_KDF_LIGHT")
 
 	return service.Options{
-		Keystore: keystore,
-		Config:   configDir,
-		State:    stateDir,
-		Network:  network,
-		Wallet:   wallet,
-		Backend:  bk,
-		KDFLight: light,
-		Clock:    time.Now,
+		Keystore:      keystore,
+		Config:        configDir,
+		State:         stateDir,
+		Network:       network,
+		NetworkSource: netSource,
+		Wallet:        wallet,
+		Backend:       bk,
+		KDFLight:      light,
+		Clock:         time.Now,
 		Secret: service.SecretIO{
 			Stdin:     os.Stdin,
 			LookupEnv: os.LookupEnv,

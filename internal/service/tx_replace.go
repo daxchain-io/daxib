@@ -64,6 +64,11 @@ func (s *Service) CancelTx(ctx context.Context, req domain.CancelRequest, sink d
 // replacement `signed` (recoverable), never `failed`, and never strands the live
 // replacement.
 func (s *Service) replaceTx(ctx context.Context, wallet, txid string, mode replaceMode, feeRateStr string, yes bool, wait domain.WaitOpts, sink domain.EventSink) (domain.TxResult, error) {
+	// No silent default: an RBF replacement is network-specific (journal keyed by
+	// network, address decode per network). Fail before the confirmation gate.
+	if err := s.requireNetwork(); err != nil {
+		return domain.TxResult{}, err
+	}
 	// 0. Confirmation gate: a replacement is a mutating op. Non-TTY without --yes is a
 	// clean confirmation-required error (never a prompt hang).
 	if !yes {

@@ -39,10 +39,22 @@ type NetworkConfig struct {
 	DefaultBackend string `toml:"default-backend,omitempty"`
 }
 
+// Defaults holds operator-wide (not per-network) defaults. Network is the
+// PERSISTED active-network default — the third rung of the resolution ladder
+// (--network > DAXIB_NETWORK > defaults.network > unresolved), written by
+// `daxib network use <net>` / `config set defaults.network`. Empty means no
+// persisted default (the unresolved sentinel; a network-requiring op then fails
+// with usage.network_required).
+type Defaults struct {
+	Network string `toml:"network,omitempty"`
+}
+
 // File is the whole config.toml document. Backends are keyed by name; Networks by
-// network name. Both maps tolerate absence (a fresh install has neither).
+// network name. Both maps tolerate absence (a fresh install has neither). Defaults
+// holds operator-wide scalars (the persisted active-network default).
 type File struct {
 	Schema   int                      `toml:"schema"`
+	Defaults Defaults                 `toml:"defaults"`
 	Backends map[string]Endpoint      `toml:"backend"`
 	Networks map[string]NetworkConfig `toml:"networks"`
 }

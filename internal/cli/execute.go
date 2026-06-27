@@ -24,5 +24,9 @@ func Execute(ctx context.Context) int {
 	root.SetErr(os.Stderr)
 
 	err := root.ExecuteContext(ctx)
-	return mapError(os.Stderr, rs.flags.Mode(), err)
+	// effectiveMode honors --json even when Cobra never bound the persistent flag —
+	// an unknown top-level command returns its error before flag parsing, and an
+	// agent passing --json must still get the JSON error envelope (ECC-3). os.Args[1:]
+	// is the same arg slice Cobra read.
+	return mapError(os.Stderr, effectiveMode(rs.flags.Mode(), os.Args[1:]), err)
 }

@@ -69,6 +69,13 @@ func (s *Service) TxStatus(ctx context.Context, req domain.TxStatusRequest) (dom
 // ListTxs returns the journal's records for the active network (newest-first),
 // optionally filtered by wallet.
 func (s *Service) ListTxs(ctx context.Context, req domain.TxListRequest) (domain.TxListResult, error) {
+	// `tx list` is per-network (the journal is network-keyed). Guard like every other
+	// tx subcommand so an unqualified list fails with usage.network_required instead of
+	// vacuously succeeding against the empty-network journal — `tx list` was the lone
+	// tx op missing this.
+	if err := s.requireNetwork(); err != nil {
+		return domain.TxListResult{}, err
+	}
 	wallet := req.Wallet
 	recs, err := s.journal.List(ctx, s.net, wallet)
 	if err != nil {

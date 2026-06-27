@@ -201,6 +201,18 @@ func (s *Store) GetEndpoint(name string) (Endpoint, error) {
 	return e, nil
 }
 
+// DefaultNetwork returns the PERSISTED active-network default (defaults.network),
+// or "" when none is set. This is the third rung of the network-resolution ladder
+// (--network > DAXIB_NETWORK > defaults.network > unresolved); the service reads it
+// at Open when no flag/env network was supplied. A missing config file is "".
+func (s *Store) DefaultNetwork() (string, error) {
+	f, err := s.load()
+	if err != nil {
+		return "", err
+	}
+	return f.Defaults.Network, nil
+}
+
 // DefaultForNetwork returns the name of the network's default backend, or "" when
 // none is set.
 func (s *Store) DefaultForNetwork(network string) (string, error) {

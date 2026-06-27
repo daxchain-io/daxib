@@ -156,6 +156,13 @@ func (s *Service) BackendTest(ctx context.Context, req domain.BackendTestRequest
 // balance/utxo path). It returns the dialed client, the resolved endpoint name,
 // and the endpoint config (for the result's masked URL). The caller must Close.
 func (s *Service) dialActiveBackend(ctx context.Context) (backend.Client, string, config.Endpoint, error) {
+	// The implicit-backend path selects by the ACTIVE network; with no network
+	// resolved there is nothing to select, so fail with usage.network_required rather
+	// than a confusing backend.not_configured. (Explicit `backend test <name>` does
+	// NOT go through here — it names its own endpoint and probes that network.)
+	if err := s.requireNetwork(); err != nil {
+		return nil, "", config.Endpoint{}, err
+	}
 	name, ep, err := s.resolveBackend("")
 	if err != nil {
 		return nil, "", config.Endpoint{}, err

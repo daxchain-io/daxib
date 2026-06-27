@@ -21,6 +21,15 @@ import (
 // usage error, exit 2), then pins the name→address entry under the registry lock.
 // A duplicate name is usage.duplicate (exit 2).
 func (s *Service) ContactAdd(ctx context.Context, req domain.ContactAddRequest) (domain.ContactAddResult, error) {
+	// `contacts add` validates the address against the active network and PINS that
+	// network on the entry (the CLI help and resolveDestination's network guard both
+	// assume a concrete network). With none resolved, chainParams() would silently fall
+	// through to MainNetParams — accepting mainnet addresses and pinning a blank network
+	// while rejecting every other family. Require a network so add fails closed rather
+	// than silently assuming mainnet. (list/show/remove stay network-independent.)
+	if err := s.requireNetwork(); err != nil {
+		return domain.ContactAddResult{}, err
+	}
 	if err := s.validateAddress(req.Address); err != nil {
 		return domain.ContactAddResult{}, err
 	}

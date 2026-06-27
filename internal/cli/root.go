@@ -49,12 +49,12 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	pf := root.PersistentFlags()
 	pf.BoolVar(&rs.flags.JSON, "json", false, "machine-readable JSON output")
 	pf.BoolVar(&rs.flags.Quiet, "quiet", false, "suppress non-essential human output")
-	pf.StringVar(&rs.flags.Network, "network", "", "Bitcoin network (mainnet/testnet/signet/regtest); overrides the configured default")
-	pf.StringVar(&rs.flags.Backend, "backend", "", "backend endpoint name (bitcoind RPC / Electrum / Esplora); overrides the network's default for this call")
+	pf.StringVar(&rs.flags.Network, "network", "", "Bitcoin network (mainnet/testnet/testnet4/signet/regtest); overrides DAXIB_NETWORK and the persisted default")
+	pf.StringVar(&rs.flags.Backend, "backend", "", "backend endpoint name (bitcoind RPC / Esplora); overrides the network's default for this call")
 	pf.StringVar(&rs.flags.Config, "config", "", "config directory holding config.toml (default: ~/.daxib)")
 	pf.StringVar(&rs.flags.Keystore, "keystore", "", "keystore directory (default: ~/.daxib/keystore)")
 	pf.StringVar(&rs.flags.StateDir, "state-dir", "", "mutable state directory (default: ~/.daxib/state)")
-	pf.BoolVarP(&rs.flags.Yes, "yes", "y", false, "skip confirmations; required for mutating ops when non-interactive")
+	pf.BoolVarP(&rs.flags.Yes, "yes", "y", false, "skip the interactive y/N confirmation prompt for irreversible ops (tx send/speedup/cancel/abandon); required for those ops when non-interactive")
 
 	root.AddCommand(
 		newVersionCmd(rs),       // M1
@@ -74,6 +74,7 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newContactsCmd(ctx, rs), // local address book (name -> address); resolves in tx send --to / policy allow
 		newConvertCmd(ctx, rs),  // float-free sat <-> BTC conversion
 		newConfigCmd(ctx, rs),   // get/set/list operator config (backends + per-network default); rejects policy.*
+		newNetworkCmd(ctx, rs),  // select/inspect the active network (use/show/list); no silent default
 		newCompletionCmd(),      // shell completion script (bash/zsh/fish/powershell)
 		// descriptor/psbt land in later milestones (docs/PLAN.md §4, §8).
 	)

@@ -26,9 +26,10 @@ import (
 // golden + this test pin). Order-independent: compared as a set.
 var wantTools = []string{
 	"balance", "utxo_list", "wallet_list", "wallet_show", "address_list", "fee",
+	"verify", "convert",
 	"tx_status", "tx_wait", "tx_list",
 	"policy_show", "policy_check",
-	"send", "address_new",
+	"send", "tx_speedup", "tx_cancel", "address_new", "sign_message",
 }
 
 // excludedTools is the recorded denylist of the §6.1 "Deliberately NOT tools" set.

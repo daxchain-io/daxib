@@ -123,6 +123,40 @@ func TestInputSchemasAcceptCLIWire(t *testing.T) {
 	validateAgainst(t, schemas, "policy_check", PolicyCheckArgs{
 		To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Amount: "0.01", FeeRate: 10,
 	})
+
+	// GAP-2 tools: a populated CLI-wire request must validate against each inferred
+	// schema (the RBF replacements, the BIP-322 sign/verify pair, and the pure convert).
+	validateAgainst(t, schemas, "tx_speedup", domain.SpeedupRequest{Txid: "abc", FeeRate: "20"})
+	validateAgainst(t, schemas, "tx_cancel", domain.CancelRequest{Txid: "abc"})
+	validateAgainst(t, schemas, "sign_message", domain.MessageSignRequest{
+		Wallet: "treasury", Ref: "treasury/0/0", Message: "proof of ownership",
+	})
+	validateAgainst(t, schemas, "verify", domain.MessageVerifyRequest{
+		Address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Message: "hi", Signature: "Akc=",
+	})
+	validateAgainst(t, schemas, "convert", domain.ConvertRequest{Amount: "0.001btc", To: "sat"})
+}
+
+// TestDefaultWalletToolsOmitWallet pins MCP-1: address_new and address_list mark
+// `wallet` OPTIONAL (json:"wallet,omitempty"), so an agent can call them with NO
+// wallet to hit the default-wallet path — matching the CLI default-wallet precedence
+// and the tools' own descriptions. A regression that re-marks wallet required would
+// make the default-wallet path uncallable over MCP.
+func TestDefaultWalletToolsOmitWallet(t *testing.T) {
+	schemas := buildToolSchemas(t)
+	for _, tool := range []string{"address_new", "address_list"} {
+		sch := schemas[tool]
+		if sch == nil {
+			t.Fatalf("%s not registered", tool)
+		}
+		for _, r := range sch.Required {
+			if r == "wallet" {
+				t.Errorf("%s marks `wallet` REQUIRED — it must be optional so the default-wallet path works over MCP (MCP-1)", tool)
+			}
+		}
+		// The default-wallet call: an EMPTY request must validate (no wallet supplied).
+		validateAgainst(t, schemas, tool, struct{}{})
+	}
 }
 
 // TestWaitTimeoutSchemaIsString is the regression guard for the domain.Duration schema:

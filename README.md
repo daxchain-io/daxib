@@ -129,7 +129,7 @@ documented exit code.
 | `address` | `new` · `list` (BIP-84 receive / `--change`) |
 | `receive` | wait for inbound funds — emits the address, then blocks until paid |
 | `balance` | confirmed / unconfirmed, UTXO-derived |
-| `utxo` | `list` · `show` |
+| `utxo` | `list` |
 | `tx` | `send` · `status` · `wait` · `list` · `speedup` (RBF) · `cancel` (RBF) |
 | `fee` | sat/vB estimates + a recommendation |
 | `sign` / `verify` | BIP-322 "simple" message signing for P2WPKH (`verify` is passphrase-free) |
@@ -148,9 +148,13 @@ with `--bind` to lock it to a single network; a bound wallet refuses ops (includ
 `sign message`) on any other active network with `usage.network_mismatch` (exit 2).
 `wallet upgrade <name>` promotes a bound (or older, migrated) wallet to agnostic.
 
-**Exit codes (stable):** `0` ok · `2` usage · `3` policy-denied · `4` auth (passphrase)
-· `5` insufficient funds · `6` backend/network · `8` timeout-pending / seal · `10`
-not-found · `11` state-dir · `12` integrity tripwire.
+**Exit codes (stable):** `0` ok · `1` internal (a daxib bug) · `2` usage · `3`
+policy-denied (spend-limit / allowlist / protected-UTXO) · `4` auth (keystore or admin
+passphrase) · `5` insufficient funds (coin-selection) · `6` backend/network · `7`
+fee-policy-denied (the computed fee-rate exceeds the max-fee-rate cap; **retryable** —
+the fee market moves) · `8` timeout-pending / seal · `9` tx-conflict (double-spend /
+RBF replacement; the **retryable** `tx.input_spent` re-select signal lives here) · `10`
+not-found / read-only · `11` state-dir · `12` integrity tripwire.
 
 ---
 

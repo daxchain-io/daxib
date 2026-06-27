@@ -50,6 +50,10 @@ func Register(srv *mcp.Server, svc *service.Service) {
 	addReadPlain(srv, "address_list", descAddressList, svc.AddressList)
 	addReadPlain(srv, "fee", descFee, svc.Fee)
 
+	// ── pure utilities (no keystore, no backend, no policy) ─────────────────────
+	addReadPlain(srv, "verify", descVerify, svc.MessageVerify) // BIP-322 verify (passphrase-free)
+	addReadPlain(srv, "convert", descConvert, svc.Convert)     // exact sat<->BTC conversion
+
 	// ── tx reads (status folds the journal; wait long-polls + dual-signals) ─────
 	addTxStatus(srv, "tx_status", descTxStatus, svc.TxStatus)
 	addTxWait(srv, "tx_wait", descTxWait, svc.WaitTx)
@@ -61,7 +65,12 @@ func Register(srv *mcp.Server, svc *service.Service) {
 
 	// ── funds-moving / mutation (route through the SAME policy-bound methods) ───
 	addSend(srv, "send", descSend, svc.SendTx)                        // the one money mover (§6.4 central guarantee)
+	addSpeedup(srv, "tx_speedup", descTxSpeedup, svc.SpeedupTx)       // RBF fee-bump (policy-gated like send)
+	addCancel(srv, "tx_cancel", descTxCancel, svc.CancelTx)           // RBF cancel/void (policy-gated like send)
 	addAddressNew(srv, "address_new", descAddressNew, svc.AddressNew) // the receive affordance
+
+	// ── keystore-gated signing (unlocks a key; moves no funds) ──────────────────
+	addSignMessage(srv, "sign_message", descSignMessage, svc.MessageSign) // BIP-322 sign (env-channel passphrase)
 }
 
 // ToolNames is the canonical roster of the §6.1 tools, in table order. It is the
@@ -74,22 +83,31 @@ var ToolNames = []string{
 	"wallet_show",  // 4  read
 	"address_list", // 5  read
 	"fee",          // 6  read
-	"tx_status",    // 7  read
-	"tx_wait",      // 8  read (long-poll, dual-signal timeout)
-	"tx_list",      // 9  read
-	"policy_show",  // 10 read-only
-	"policy_check", // 11 read-only (dry-run)
-	"send",         // 12 SIGN (the one money mover)
-	"address_new",  // 13 mutation (derive next receive address; no signing)
+	"verify",       // 7  read (BIP-322 verify; passphrase-free, pure)
+	"convert",      // 8  read (exact sat<->BTC; pure)
+	"tx_status",    // 9  read
+	"tx_wait",      // 10 read (long-poll, dual-signal timeout)
+	"tx_list",      // 11 read
+	"policy_show",  // 12 read-only
+	"policy_check", // 13 read-only (dry-run)
+	"send",         // 14 SIGN (the one money mover)
+	"tx_speedup",   // 15 SIGN (RBF fee-bump; policy-gated like send)
+	"tx_cancel",    // 16 SIGN (RBF cancel/void; policy-gated like send)
+	"address_new",  // 17 mutation (derive next receive address; no signing)
+	"sign_message", // 18 SIGN (BIP-322 message signature; keystore-gated, moves no funds)
 }
 
-// SigningTools is the canonical set of the tools that move funds — the one money
-// mover. send routes through the SAME svc.SendTx that holds the only path to the
-// keystore signer, with policy.Reserve INSIDE it (§6.4) — so MCP is policy-gated
-// identically to the CLI. address_new derives an address but never signs, so it is
-// NOT in this set.
+// SigningTools is the canonical set of the tools that move funds — the money movers.
+// send/tx_speedup/tx_cancel route through the SAME svc.Send/Speedup/CancelTx that
+// hold the only path to the keystore signer, with policy.Reserve INSIDE each (§6.4)
+// — so MCP is policy-gated identically to the CLI. sign_message DOES unlock a key but
+// moves NO funds (it produces a BIP-322 signature, charging nothing against the spend
+// policy), so it is NOT in this fund-mover set; address_new derives an address but
+// never signs, so it is not here either.
 var SigningTools = []string{
 	"send",
+	"tx_speedup",
+	"tx_cancel",
 }
 
 // ExcludedTools is the recorded, non-regressable deliberately-NOT-tools boundary

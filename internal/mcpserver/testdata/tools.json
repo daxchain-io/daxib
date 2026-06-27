@@ -9,9 +9,6 @@
           "type": "string"
         }
       },
-      "required": [
-        "wallet"
-      ],
       "type": "object"
     },
     "outputSchema": {
@@ -86,9 +83,6 @@
           "type": "string"
         }
       },
-      "required": [
-        "wallet"
-      ],
       "type": "object"
     },
     "outputSchema": {
@@ -229,6 +223,62 @@
         "total_btc",
         "utxo_count",
         "tip_height"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "convert",
+    "description": "Convert a Bitcoin amount between satoshis and BTC, exactly (no floating point). 'amount' carries its unit as a suffix ('0.001btc', '150000sat') or is a bare BTC number; 'to' names the target unit (sat|sats|btc), or omit it to convert to the OTHER unit. Returns the canonical integer-sat value, the exact 8-dp BTC string, and the result in the requested unit. Pure utility — touches no wallet, no key, no backend.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "description": "value with optional unit suffix, e.g. \"0.001btc\" or \"150000sat\" or a bare BTC number",
+          "type": "string"
+        },
+        "to": {
+          "description": "target unit: sat|sats|btc; omit to convert to the other unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "btc": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "input": {
+          "type": "string"
+        },
+        "sat": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "input",
+        "sat",
+        "btc",
+        "from",
+        "to",
+        "value"
       ],
       "type": "object"
     },
@@ -721,6 +771,233 @@
     }
   },
   {
+    "name": "sign_message",
+    "description": "Sign an arbitrary message with a wallet address's key (Bitcoin BIP-322 'simple', for proving address ownership — NOT a fund movement). 'ref' is a bech32 address or a 'wallet/branch/index' derivation ref; 'message' is the text to sign. Unlocking the key needs the keystore passphrase, which is supplied to the server out-of-band (never a tool argument). Returns the signing address and the base64 BIP-322 witness signature. Signs nothing on-chain and moves no funds.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "message"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address",
+        "message",
+        "signature",
+        "format"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "tx_cancel",
+    "description": "Cancel an unconfirmed, RBF-signaling send by replacing it with a higher-fee transaction that redirects ALL funds to a fresh wallet-owned change address, voiding the original payment (Bitcoin BIP-125). The replacement is POLICY-CHECKED before signing like any send (paying yourself always satisfies the destination rules; the fee-rate cap still applies). 'txid' is the original (still-unconfirmed) transaction; 'fee_rate' (sat/vByte) overrides the default bump (the backend fast tier, never below the original + 1). Waits for confirmation by default over MCP. Returns the replacement txid (replaces_txid names the voided original) and status. A target already confirmed/replaced is a tx_conflict error.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fee_rate": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "wait": {
+          "additionalProperties": false,
+          "properties": {
+            "confirmations": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "txid"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_btc": {
+          "type": "string"
+        },
+        "amount_sat": {
+          "type": "integer"
+        },
+        "block_height": {
+          "type": "integer"
+        },
+        "change_address": {
+          "type": "string"
+        },
+        "change_btc": {
+          "type": "string"
+        },
+        "change_sat": {
+          "type": "integer"
+        },
+        "confirmations": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "raw_tx_hex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "boolean"
+        },
+        "replaces_txid": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "to",
+        "amount_sat",
+        "amount_btc",
+        "fee_sat",
+        "fee_btc",
+        "fee_rate",
+        "vsize",
+        "status"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true
+    }
+  },
+  {
     "name": "tx_list",
     "description": "List this wallet's transactions from the local journal, newest first: journal id, txid, status, recipient, amount, fee, vsize, confirmations, and timestamp. Filter by 'wallet' and cap with 'limit' (0 = no limit). The journal is the durable history. Read-only.",
     "inputSchema": {
@@ -805,6 +1082,183 @@
     },
     "annotations": {
       "readOnlyHint": true
+    }
+  },
+  {
+    "name": "tx_speedup",
+    "description": "Replace an unconfirmed, RBF-signaling send with a higher-fee transaction paying the SAME recipient (Bitcoin BIP-125 fee bump). The replacement is POLICY-CHECKED before signing exactly like a fresh send — only the additional fee is charged against the rolling-24h limit, but the fee-rate cap and destination rules still apply. 'txid' is the original (still-unconfirmed) transaction; 'fee_rate' (sat/vByte) overrides the default bump (the backend fast tier, never below the original + 1). Waits for confirmation by default over MCP. Returns the replacement txid (replaces_txid names the original) and status. A target already confirmed/replaced is a tx_conflict error.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fee_rate": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "wait": {
+          "additionalProperties": false,
+          "properties": {
+            "confirmations": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "txid"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_btc": {
+          "type": "string"
+        },
+        "amount_sat": {
+          "type": "integer"
+        },
+        "block_height": {
+          "type": "integer"
+        },
+        "change_address": {
+          "type": "string"
+        },
+        "change_btc": {
+          "type": "string"
+        },
+        "change_sat": {
+          "type": "integer"
+        },
+        "confirmations": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "raw_tx_hex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "boolean"
+        },
+        "replaces_txid": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "to",
+        "amount_sat",
+        "amount_btc",
+        "fee_sat",
+        "fee_btc",
+        "fee_rate",
+        "vsize",
+        "status"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true
     }
   },
   {
@@ -1198,6 +1652,61 @@
         "utxos",
         "total_sat",
         "total_btc"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "verify",
+    "description": "Verify a Bitcoin BIP-322 'simple' message signature against an address (passphrase-free, no signing). 'address', 'message', and the base64 'signature' fully determine the result. A signature that decodes but does NOT match is NOT an error — it returns valid:false (branch on the field); only a malformed address or undecodable signature is an error. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address",
+        "message",
+        "signature"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "valid": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "valid",
+        "address",
+        "message",
+        "signature",
+        "format"
       ],
       "type": "object"
     },

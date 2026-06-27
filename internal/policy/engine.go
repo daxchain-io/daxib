@@ -12,6 +12,7 @@ import (
 	"github.com/daxchain-io/daxib/internal/domain"
 	"github.com/daxchain-io/daxib/internal/fsx"
 	"github.com/daxchain-io/daxib/internal/policyseal"
+	"github.com/daxchain-io/daxib/internal/secret"
 )
 
 // lockTimeout bounds the per-network policy flock (maps to state.lock_timeout).
@@ -422,6 +423,39 @@ func (e *Engine) Orphans(ctx context.Context) ([]OrphanReservation, error) {
 	return out, nil
 }
 
+// ReservationState returns the on-disk state ("reserved"/"committed"/"released")
+// of one reservation id on a network, plus found=false when the id is unknown
+// (pruned/settled/never existed). It reads under the per-network lock. The abandon
+// path (GAP-1) uses it to refuse freeing the inputs of a record whose reservation
+// is COMMITTED — i.e. the send pipeline already Commit()ed and the bytes may be
+// live on the chain even though a crash left the journal record at `signed`.
+func (e *Engine) ReservationState(ctx context.Context, network, id string) (state string, found bool, err error) {
+	if id == "" {
+		return "", false, nil
+	}
+	lerr := e.withNetworkLock(ctx, network, func() error {
+		cf, e2 := e.loadCounter(network)
+		if e2 != nil {
+			return e2
+		}
+		ent := cf.findEntry(id)
+		if ent == nil {
+			return nil
+		}
+		state = ent.State
+		found = true
+		return nil
+	})
+	if lerr != nil {
+		return "", false, lerr
+	}
+	return state, found, nil
+}
+
+// CommittedState is the on-disk committed-reservation marker exported for callers
+// (the service abandon guard) that must reason about a reservation's settlement.
+const CommittedState = stateCommitted
+
 // CommitOrphan / ReleaseOrphan are the reconcile twins of Commit/Release.
 func (e *Engine) CommitOrphan(ctx context.Context, network, id, txid string) error {
 	return e.transition(ctx, network, id, stateCommitted, txid)
@@ -429,6 +463,53 @@ func (e *Engine) CommitOrphan(ctx context.Context, network, id, txid string) err
 
 func (e *Engine) ReleaseOrphan(ctx context.Context, network, id string) error {
 	return e.transition(ctx, network, id, stateReleased, "")
+}
+
+// ReleaseReservation is the GAP-4 operator escape hatch (`policy release <id>`):
+// it frees a STUCK pre-signature reservation (reserved → released) so a crash
+// between Reserve and a settle/abort that never resolved the row does not strand the
+// rolling-24h budget forever.
+//
+// It is ADMIN-GATED (the admin passphrase must derive the pinned verify key) so a
+// prompt-compromised agent cannot free its own budget; and conservative — fail
+// CLOSED. It REFUSES a COMMITTED reservation (a committed row counts a spend whose
+// bytes reached, or will reach, the chain; releasing it would let an agent re-spend
+// that budget). An already-released row is idempotent (success). An unknown id is
+// policy.state_error so the operator learns the id was wrong rather than silently
+// succeeding.
+func (e *Engine) ReleaseReservation(ctx context.Context, adminPass *secret.Bytes, network, id string) error {
+	if id == "" {
+		return errState("a reservation id is required", nil)
+	}
+	if !e.anchorFound {
+		return errAdminAuth("no anchor is pinned; there are no sealed reservations to release")
+	}
+	sk, aerr := e.authenticate(adminPass)
+	if aerr != nil {
+		return aerr
+	}
+	zeroKey(sk)
+	return e.withNetworkLock(ctx, network, func() error {
+		cf, err := e.loadCounter(network)
+		if err != nil {
+			return err
+		}
+		ent := cf.findEntry(id)
+		if ent == nil {
+			return errState("no reservation "+id+" on network "+network+" (already pruned, settled, or wrong id)", nil)
+		}
+		switch ent.State {
+		case stateCommitted:
+			return domain.WithData(
+				domain.New(codeStateError,
+					"refusing to release a COMMITTED reservation; its spend reached (or will reach) the chain — only a stuck pending reservation is releasable"),
+				map[string]any{"reservation_id": id, "network": network, "state": ent.State})
+		case stateReleased:
+			return nil // idempotent
+		}
+		ent.State = stateReleased
+		return e.writeCounter(network, cf, e.now())
+	})
 }
 
 // ── locking ──────────────────────────────────────────────────────────────────

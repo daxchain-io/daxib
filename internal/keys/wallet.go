@@ -233,9 +233,25 @@ func (s *Store) materializeWallet(meta *metaFile, name string, network domain.Ne
 		return CreateResult{}, err
 	}
 
+	var bipOut *secret.Bytes
+	if len(bip39pass) > 0 {
+		bipOut = secret.NewString(string(bip39pass))
+	}
+
 	// The DISPLAYED coin_type: the bound network for bound; the requested
-	// (active/hint) network for agnostic. Both chains exist for agnostic, so the
-	// hint network's chain is always present.
+	// (active/hint) network for agnostic. An AGNOSTIC create with NO resolved network
+	// (network == "") has no per-network display: the wallet is fully created (both
+	// coin_type chains materialized), but we render no sample address / path / xpub —
+	// daxib never silently picks a network just to print one. (Bound create always
+	// has a network: the service guards usage.network_required before --bind.)
+	if network == "" {
+		return CreateResult{
+			WalletID:  id,
+			Scope:     scope,
+			BIP39Pass: bipOut,
+		}, nil
+	}
+
 	dispNet := network
 	dispChain, ok := mw.chain(dispNet)
 	if !ok {
@@ -246,10 +262,6 @@ func (s *Store) materializeWallet(meta *metaFile, name string, network domain.Ne
 		return CreateResult{}, derr
 	}
 
-	var bipOut *secret.Bytes
-	if len(bip39pass) > 0 {
-		bipOut = secret.NewString(string(bip39pass))
-	}
 	return CreateResult{
 		WalletID:        id,
 		Scope:           scope,

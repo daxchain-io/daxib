@@ -21,6 +21,15 @@ import (
 // directly from the config dir (NOT via TOML/env/flag) and roots the engine at the
 // state dir. A missing config dir means no anchor (the permissive opt-in path).
 func (s *Service) openPolicyEngine(ctx context.Context) (*policy.Engine, error) {
+	// Policy ops are network-scoped (per-network limits/counters, the active-family
+	// self snapshot, the active-network check). With no network resolved they would
+	// silently operate against a defaulted family, so fail with usage.network_required.
+	// This is the shared gate for show/set/allow/deny/verify/check/counters/reset/
+	// change-admin-passphrase/pin. The in-pipeline Reserve path goes through SendTx,
+	// which already guards earlier.
+	if err := s.requireNetwork(); err != nil {
+		return nil, err
+	}
 	var anchor policyseal.Anchor
 	found := false
 	if s.opts.Config != "" {
@@ -128,9 +137,28 @@ func (s *Service) dryRunPolicyCheck(_ string) reserveFn {
 }
 
 // reconcilePolicyOrphans resolves orphaned spend reservations against the journal at
-// Open: a reservation whose journal record reached `broadcast` ⇒ commit; still
-// `signed`/absent ⇒ release. Best-effort (never fails Open). It is the policy-side
-// twin of the journal reconcile (policy may not import journal, so service drives it).
+// Open. Best-effort (never fails Open). It is the policy-side twin of the journal
+// reconcile (policy may not import journal, so service drives it).
+//
+// POL-1 — fail CLOSED on the offline path. This runs at Open WITHOUT dialing a
+// backend, so it cannot positively learn whether a `signed` record's bytes are live
+// on the network. A `signed` record HAS journaled signed bytes that MAY already have
+// reached the mempool — the SendTx accepted path commits the reservation and only
+// THEN writes SetState(broadcast), so a crash between those two leaves a live tx in
+// `signed`; reconcileWallet also rebroadcasts `signed` records under the send-lock.
+// Releasing a `signed` orphan's reservation (refunding the rolling-24h budget) would
+// therefore let an agent re-spend a budget that a live tx already consumed
+// (fail-OPEN). So offline we leave a `signed` orphan RESERVED — over-counting is the
+// safe direction. An ONLINE path (a real send's reconcileWallet, or `tx wait`/`tx
+// status`) positively settles it later: confirmed/broadcast ⇒ commit; a permanent
+// reject flips the record to `failed`, releasing the reservation.
+//
+// Only a reservation whose record is DEFINITIVELY pre-broadcast is released here:
+//   - rec == nil: the reservation was taken in buildAndSign BEFORE journal.Append, so
+//     a missing journal record means build/sign aborted before any bytes were ever
+//     journaled — no broadcast was possible ⇒ release.
+//   - rec.Status == failed: a positively-terminalized record (an abort before a
+//     broadcast was recorded, or a permanent reject) ⇒ release.
 func (s *Service) reconcilePolicyOrphans(ctx context.Context) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
@@ -142,11 +170,20 @@ func (s *Service) reconcilePolicyOrphans(ctx context.Context) {
 	}
 	// Index journal records by reservation id across all networks present in orphans.
 	for _, o := range orphans {
-		rec := s.journalByReservation(ctx, domainNetwork(o.Network), o.ID)
+		rec, jerr := s.journalByReservation(ctx, domainNetwork(o.Network), o.ID)
+		if jerr != nil {
+			// A journal-read fault (lock timeout from a concurrent process, an IO/
+			// permission fault, a read-only state mount) is NOT a "no record" signal: the
+			// journaled bytes MAY be live. Fail CLOSED — leave the orphan RESERVED (over-
+			// counting is the safe direction) and let a later online settle resolve it.
+			// Releasing here would refund a budget a live tx may already have consumed.
+			continue
+		}
 		switch {
 		case rec == nil:
-			// No journal record references this reservation ⇒ no bytes were ever
-			// broadcast ⇒ release (free the budget).
+			// No journal record references this reservation ⇒ the crash landed between
+			// Reserve and journal.Append, so no signed bytes were ever journaled and no
+			// broadcast was possible ⇒ release (free the budget).
 			_ = eng.ReleaseOrphan(ctx, o.Network, o.ID)
 		case rec.Status == "broadcast" || rec.Status == "confirmed" || rec.Status == "replaced":
 			// `broadcast`/`confirmed`: the bytes reached (or will reach) the chain ⇒
@@ -156,28 +193,88 @@ func (s *Service) reconcilePolicyOrphans(ctx context.Context) {
 			// under-counts the live replacement's full outflow (releasing it here would
 			// let an RBF cycle leak the original payment amount back into the budget).
 			_ = eng.CommitOrphan(ctx, o.Network, o.ID, rec.Txid)
-		default: // still `signed`/`failed` ⇒ no recorded broadcast ⇒ release
+		case rec.Status == "failed":
+			// Positively pre-broadcast: an abort-before-broadcast or a permanent reject
+			// terminalized the record ⇒ no live bytes ⇒ release.
 			_ = eng.ReleaseOrphan(ctx, o.Network, o.ID)
+		default:
+			// `signed` (or any not-yet-terminal state): the journaled bytes MAY be live on
+			// the network and we cannot prove otherwise offline. Leave the reservation
+			// RESERVED (fail closed); an online settle resolves it. NEVER release here.
 		}
 	}
 }
 
-// journalByReservation finds the journal record cross-linked to a reservation id on
-// a network (a small scan; the reconcile worklist is bounded by in-flight sends).
-func (s *Service) journalByReservation(ctx context.Context, net domain.Network, resID string) *journal.Record {
-	if s.journal == nil {
+// policyRotationFaultHook lets crash-point tests abort PolicyChangeAdminPassphrase at
+// a named step ("after_stage" / "after_reseal" / "after_promote"), simulating a
+// process kill that leaves the on-disk anchor + policy.json in whatever state the
+// prior steps produced. Production leaves it nil. Test-only.
+var policyRotationFaultHook func(point string) error
+
+func firePolicyRotationFault(point string) error {
+	if policyRotationFaultHook == nil {
 		return nil
+	}
+	return policyRotationFaultHook(point)
+}
+
+// recoverPolicyRotation converges a half-finished staged admin-passphrase rotation
+// (SI-1) at Open: it asks the engine which key policy.json verifies under and, if the
+// anchor must change (roll forward = promote, roll back = drop the staged key), lands
+// the converged anchor to the config class. Best-effort at the Open path (a converge
+// failure surfaces on the next real op as a seal violation), but it RETURNS the error
+// to the explicit pre-rotation caller so a new rotation never stacks on an
+// unconverged one. With no staged rotation it is a no-op.
+func (s *Service) recoverPolicyRotation(ctx context.Context, eng *policy.Engine) error {
+	anchor, changed, rerr := eng.RecoverAdminRotation()
+	if rerr != nil {
+		return rerr
+	}
+	if !changed {
+		return nil
+	}
+	// Land the converged anchor. On a read-only config mount we cannot rewrite it; the
+	// dual-key anchor on disk still verifies policy.json (under whichever key it is
+	// sealed), so the guardrails remain usable — swallow that one case.
+	if werr := s.writeAnchor(ctx, anchor); werr != nil {
+		if config.AnchorIsReadOnly(werr) {
+			return nil
+		}
+		return werr
+	}
+	return nil
+}
+
+// reconcilePolicyRotation is the Open-path (best-effort) twin of
+// recoverPolicyRotation: it converges an interrupted rotation without failing Open.
+func (s *Service) reconcilePolicyRotation(ctx context.Context) {
+	eng, err := s.openPolicyEngine(ctx)
+	if err != nil {
+		return // a seal failure surfaces on the next real op, not at Open
+	}
+	_ = s.recoverPolicyRotation(ctx, eng)
+}
+
+// journalByReservation finds the journal record cross-linked to a reservation id on
+// a network (a small scan; the reconcile worklist is bounded by in-flight sends). It
+// returns (nil, nil) ONLY when the journal genuinely has no record for the
+// reservation; a journal-read fault is returned as a non-nil error so callers do NOT
+// conflate "no record" (release-safe) with "could not read" (fail-closed). A nil
+// journal is treated as "no record" (production always wires one).
+func (s *Service) journalByReservation(ctx context.Context, net domain.Network, resID string) (*journal.Record, error) {
+	if s.journal == nil {
+		return nil, nil
 	}
 	recs, err := s.journal.List(ctx, net, "")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	for _, r := range recs {
 		if r.ReservationID == resID {
-			return r
+			return r, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // domainNetwork narrows a network string to the domain type.
@@ -258,6 +355,14 @@ func anchorView(a policyseal.Anchor) AnchorView {
 		Salt:           a.Salt,
 		NonceWatermark: a.NonceWatermark,
 	}
+}
+
+// PolicyReleaseResult is `policy release <id>` output: the released reservation id +
+// network.
+type PolicyReleaseResult struct {
+	ReservationID string `json:"reservation_id"`
+	Network       string `json:"network"`
+	Released      bool   `json:"released"`
 }
 
 // PolicyCheckResult is `policy check` / dry-run evaluation output.
