@@ -79,13 +79,24 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 		s.light = m.Light
 	}
 
-	if _, statErr := os.Stat(s.metaPath()); statErr == nil {
+	// A manifest existing means the keystore is initialized, so a crashed
+	// change-passphrase rotation may have left staged artifacts (§3.8). Heal them
+	// (roll forward if the commit marker is present, else roll back the orphaned
+	// .new files) under the exclusive lock BEFORE the watermark tripwire, so both
+	// run against a single-passphrase, consistent on-disk state.
+	if m != nil {
 		if werr := s.withLock(ctx, func() error {
-			meta, lerr := s.loadMeta()
-			if lerr != nil {
-				return lerr
+			if rerr := recoverRotation(s.dir); rerr != nil {
+				return rerr
 			}
-			return meta.checkWatermark()
+			if _, statErr := os.Stat(s.metaPath()); statErr == nil {
+				meta, lerr := s.loadMeta()
+				if lerr != nil {
+					return lerr
+				}
+				return meta.checkWatermark()
+			}
+			return nil
 		}); werr != nil {
 			return nil, werr
 		}

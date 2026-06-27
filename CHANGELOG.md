@@ -6,6 +6,38 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+Command-surface parity with daxie's v1 — seven new nouns over the same one-core,
+two-frontends architecture (CLI + MCP), each with a human form, `--json`, a
+non-interactive path, and a documented exit code:
+
+- **`sign` / `verify`** — BIP-322 "simple" message signing/verification for P2WPKH.
+  `sign message <addr|wallet/branch/index>` produces a base64 signature (needs the
+  keystore passphrase); `verify` is passphrase-free (reconstructs the BIP-322 virtual
+  txs and runs the script engine). A well-formed-but-wrong signature is `valid=false`
+  with exit `0`; malformed input is `usage.bad_signature` (exit `2`). New
+  `internal/bip322` provider leaf.
+- **`keystore`** — `info` (read-only: path, format, KDF, scrypt N, wallet count) and
+  `change-passphrase`, an atomic two-phase (stage → commit-marker → swap) re-encryption
+  of the verifier + every wallet blob under fresh per-file salts/nonces. Crash-safe:
+  recovery on the next open rolls forward (marker present) or back (orphaned staging),
+  never a mixed-passphrase keystore. Mandatory new-passphrase double-entry confirmation.
+- **`receive`** — derive/peek a receive address, emit it immediately, then block until
+  paid; NDJSON event stream (`listening → detected → confirmed → complete`) or a bounded
+  `--timeout` (exit `8`, resumable). Detection is baselined at listen-start so a
+  pre-existing balance is not a false positive.
+- **`contacts`** — `add` / `list` / `show` / `remove` address book (state-class registry,
+  per-network address validation). Names resolve in `tx send --to <name>` and
+  `policy allow <name>`; a raw address always wins over a colliding contact name, and a
+  contact name that parses as an address is rejected.
+- **`convert`** — float-free sat ⇄ BTC conversion (bare numbers are BTC, per the
+  `sendtoaddress` convention).
+- **`completion`** — shell completion scripts for bash / zsh / fish / powershell.
+- **`config`** — `get` / `set` / `list` over `config.toml` (per-network default backend).
+  The sealed `policy.*` subtree is read-only here (`usage.policy_key`); an unknown key is
+  `ref.not_found` (exit `10`).
+
 ## [0.1.3] - 2026-06-27
 
 Build/release-pipeline parity with daxie. No change to the wallet itself.

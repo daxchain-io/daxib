@@ -7,6 +7,7 @@ import (
 
 	"github.com/daxchain-io/daxib/internal/backend"
 	"github.com/daxchain-io/daxib/internal/config"
+	"github.com/daxchain-io/daxib/internal/contacts"
 	"github.com/daxchain-io/daxib/internal/domain"
 	"github.com/daxchain-io/daxib/internal/journal"
 	"github.com/daxchain-io/daxib/internal/keys"
@@ -27,8 +28,9 @@ type Service struct {
 	net     domain.Network // active network (validated)
 	dial    func(ctx context.Context, o backend.Options) (backend.Client, error)
 
-	journal  *journal.Store // the tx journal (state class); nil only if Open failed to bind it
-	stateDir string         // resolved mutable state directory (<data>/state by default)
+	journal  *journal.Store  // the tx journal (state class); nil only if Open failed to bind it
+	contacts *contacts.Store // the local address book (state class); name->address resolution
+	stateDir string          // resolved mutable state directory (<data>/state by default)
 }
 
 // Open builds a Service from Options. The keystore is opened eagerly (keys.Open
@@ -80,6 +82,14 @@ func Open(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	// The contacts address book (state class) opens lazily: it creates no dirs
+	// until the first `contacts add`, so a read-only/uninitialized state dir is fine
+	// for non-mutating commands. It shares the resolved state dir with the journal.
+	contactStore, err := contacts.Open(sd)
+	if err != nil {
+		return nil, err
+	}
+
 	svc := &Service{
 		opts:     opts,
 		keys:     ks,
@@ -91,6 +101,7 @@ func Open(ctx context.Context, opts Options) (*Service, error) {
 		net:      net,
 		dial:     dial,
 		journal:  j,
+		contacts: contactStore,
 		stateDir: sd,
 	}
 

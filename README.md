@@ -123,15 +123,20 @@ documented exit code.
 | Noun | Verbs |
 |---|---|
 | `wallet` | `create` · `import` · `list` · `show` · `export` |
+| `keystore` | `info` · `change-passphrase` (atomic, crash-safe re-encryption) |
 | `address` | `new` · `list` (BIP-84 receive / `--change`) |
+| `receive` | wait for inbound funds — emits the address, then blocks until paid |
 | `balance` | confirmed / unconfirmed, UTXO-derived |
 | `utxo` | `list` · `show` |
 | `tx` | `send` · `status` · `wait` · `list` · `speedup` (RBF) · `cancel` (RBF) |
 | `fee` | sat/vB estimates + a recommendation |
+| `sign` / `verify` | BIP-322 "simple" message signing for P2WPKH (`verify` is passphrase-free) |
+| `contacts` | `add` · `list` · `show` · `remove` — names resolve in `tx send --to` / `policy allow` |
 | `backend` | `add` · `list` · `use` · `test` · `remove` (Bitcoin Core RPC / Esplora) |
 | `policy` | `show` · `set` · `allow` · `deny` · `check` · `counters` · `verify` · `reset` · `pin` · `change-admin-passphrase` |
+| `config` | `get` · `set` · `list` (per-network default backend; the sealed `policy.*` subtree is read-only) |
 | `mcp` | `serve` · `tools` |
-| utility | `version` |
+| utility | `version` · `convert` (sat ⇄ BTC) · `completion` (bash/zsh/fish/powershell) |
 
 Network is a global `--network mainnet\|testnet\|testnet4\|signet\|regtest` flag.
 
@@ -191,8 +196,8 @@ co-sign) are on the roadmap below, not in this release.
 Deferred Bitcoin-native capabilities — documented honestly rather than overbuilt up
 front:
 
-- **BIP-322 message signing** and a standalone **PSBT** noun (hardware-wallet / multi-
-  wallet interop). *(Daxib already signs internally; these expose it.)*
+- A standalone **PSBT** noun (hardware-wallet / multi-wallet interop). *(BIP-322
+  message signing already ships — see `sign` / `verify` above.)*
 - **Runes / Ordinals / inscriptions** — hold and move Bitcoin tokens and NFTs, with
   asset protection so coin selection never burns a rare sat as a fee.
 - **Watch-only + external PSBT signer** — no private keys on the agent host at all.

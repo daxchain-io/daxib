@@ -29,6 +29,16 @@ var broadcastBackoff = []time.Duration{0, time.Second, 2 * time.Second, 4 * time
 // terminalize on a permanent reject, leave `signed` on transport exhaustion (the
 // recoverable, idempotent-rebroadcast case).
 func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domain.EventSink) (domain.TxResult, error) {
+	// Resolve --to through the contacts address book FIRST: a contact NAME maps to
+	// its pinned address; a raw address falls through unchanged. From here on req.To
+	// is always a raw address, so the validation + build path is identical for
+	// contact-named and raw-address sends.
+	resolvedTo, rerr := s.resolveDestination(ctx, req.To)
+	if rerr != nil {
+		return domain.TxResult{}, rerr
+	}
+	req.To = resolvedTo
+
 	// Validate the amount + destination address FIRST — before wallet resolution or
 	// any backend dial — so a malformed --amount/--to is a clean usage error (exit
 	// 2) even with no wallet/node. The parsed values are recomputed in buildAndSign.

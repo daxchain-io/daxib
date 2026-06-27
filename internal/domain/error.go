@@ -155,6 +155,12 @@ const (
 	CodeStateLockTimeout     = "state.lock_timeout"          // flock contention (exit 11)
 	CodeStateCorrupt         = "state.corrupt"               // unrecoverable state file (exit 11)
 	CodeRefNotFound          = "ref.not_found"               // unknown txid/wallet (exit 10)
+
+	// sign/verify (BIP-322) input codes. A missing message input, a signature that
+	// is not decodable base64 / not a valid witness, and (reusing usage.bad_address)
+	// a ref that names no keystore address — all usage-class (exit 2).
+	CodeMessageRequired = "usage.message_required" //nolint:gosec // G101: dotted error-code string, not a credential
+	CodeBadSignature    = "usage.bad_signature"    //nolint:gosec // G101: dotted error-code string, not a credential
 )
 
 // codeExit is the (prefix -> exit) registry, highest-specificity wins. The key
@@ -197,6 +203,14 @@ var codeExit = map[string]ExitCode{
 	"usage.bad_timeout":           ExitUsage,
 	"usage.dust_output":           ExitUsage,
 	"usage.confirmation_required": ExitUsage,
+	// sign/verify (BIP-322) input failures (exit 2): a message input that was not
+	// supplied via --message/--message-file/-stdin, a signature that is not valid
+	// base64 / not a decodable witness, and a ref that names no address in the
+	// keystore. All are USAGE-class — a malformed request, not an auth or state
+	// failure. (A signature that decodes but does not VERIFY is NOT an error: it is
+	// a successful verify with valid=false, exit 0.)
+	"usage.message_required": ExitUsage,
+	"usage.bad_signature":    ExitUsage,
 
 	// 3 — POLICY_DENIED (covers all policy.denied.* via the prefix rule:
 	// spend limit, destination allowlist, protected-UTXO refusal, coin-control).

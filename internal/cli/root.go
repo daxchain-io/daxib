@@ -57,17 +57,25 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	pf.BoolVarP(&rs.flags.Yes, "yes", "y", false, "skip confirmations; required for mutating ops when non-interactive")
 
 	root.AddCommand(
-		newVersionCmd(rs),      // M1
-		newWalletCmd(ctx, rs),  // M2: keys + HD wallet
-		newAddressCmd(ctx, rs), // M2: BIP-84 address derivation
-		newBackendCmd(ctx, rs), // M3: backend provider (bitcoind RPC / Esplora)
-		newBalanceCmd(ctx, rs), // M3: UTXO-derived balance
-		newUTXOCmd(ctx, rs),    // M3: utxo list
-		newTxCmd(ctx, rs),      // M4: tx send/status/wait/list (the send pipeline)
-		newFeeCmd(ctx, rs),     // M4: fee estimates + recommendation
-		newPolicyCmd(ctx, rs),  // M5: sealed spend-limit guardrails
-		newMcpCmd(ctx, rs),     // M6: the MCP server (Frontend 2) + tool introspection
-		// descriptor/psbt/receive land in later milestones (docs/PLAN.md §4, §8).
+		newVersionCmd(rs),       // M1
+		newWalletCmd(ctx, rs),   // M2: keys + HD wallet
+		newAddressCmd(ctx, rs),  // M2: BIP-84 address derivation
+		newBackendCmd(ctx, rs),  // M3: backend provider (bitcoind RPC / Esplora)
+		newBalanceCmd(ctx, rs),  // M3: UTXO-derived balance
+		newUTXOCmd(ctx, rs),     // M3: utxo list
+		newTxCmd(ctx, rs),       // M4: tx send/status/wait/list (the send pipeline)
+		newFeeCmd(ctx, rs),      // M4: fee estimates + recommendation
+		newPolicyCmd(ctx, rs),   // M5: sealed spend-limit guardrails
+		newMcpCmd(ctx, rs),      // M6: the MCP server (Frontend 2) + tool introspection
+		newKeystoreCmd(ctx, rs), // keystore change-passphrase (atomic re-encryption) + info
+		newSignCmd(ctx, rs),     // BIP-322 message signing (needs the keystore passphrase)
+		newVerifyCmd(ctx, rs),   // BIP-322 message verification (passphrase-free)
+		newReceiveCmd(ctx, rs),  // block until an inbound tx pays the receive address
+		newContactsCmd(ctx, rs), // local address book (name -> address); resolves in tx send --to / policy allow
+		newConvertCmd(ctx, rs),  // float-free sat <-> BTC conversion
+		newConfigCmd(ctx, rs),   // get/set/list operator config (backends + per-network default); rejects policy.*
+		newCompletionCmd(),      // shell completion script (bash/zsh/fish/powershell)
+		// descriptor/psbt land in later milestones (docs/PLAN.md §4, §8).
 	)
 
 	return root

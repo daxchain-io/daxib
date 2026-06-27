@@ -66,6 +66,10 @@ linters:
               desc: "frontends import service+domain only — not journal"
             - pkg: github.com/daxchain-io/daxib/internal/registry
               desc: "frontends import service+domain only — not registry"
+            - pkg: github.com/daxchain-io/daxib/internal/contacts
+              desc: "frontends import service+domain only — not the contacts address-book leaf"
+            - pkg: github.com/daxchain-io/daxib/internal/bip322
+              desc: "frontends import service+domain only — not the bip322 message-signing leaf"
 
         # ── mcpserver must NOT import cli (the reverse IS sanctioned) ──
         # The two frontends are independent adapters over the same core, with ONE
@@ -124,6 +128,27 @@ linters:
             - pkg: github.com/daxchain-io/daxib/internal/config
               desc: "journal imports domain + fsx only — not config"
 
+        # ── contacts is a state provider leaf: domain + fsx (+ stdlib) ONLY ──
+        # The local address book (name -> address). Like journal, it imports the
+        # error taxonomy + the atomic-write/lock/perms helpers and nothing else of
+        # ours: never the core (service), a frontend, or another provider.
+        contacts:
+          files:
+            - "**/internal/contacts/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/service
+              desc: "contacts is a provider leaf — never the core"
+            - pkg: github.com/daxchain-io/daxib/internal/cli
+              desc: "contacts is a provider leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/mcpserver
+              desc: "contacts is a provider leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/backend
+              desc: "contacts imports domain + fsx only — not backend"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "contacts imports domain + fsx only — not keys (the service validates the address)"
+            - pkg: github.com/daxchain-io/daxib/internal/config
+              desc: "contacts imports domain + fsx only — not config"
+
         # ── policyseal is a LEAF crypto util: stdlib + x/crypto (+ domain) ONLY ──
         policyseal:
           files:
@@ -137,6 +162,29 @@ linters:
               desc: "policyseal is a crypto leaf — config reads the anchor, not the reverse"
             - pkg: github.com/daxchain-io/daxib/internal/keys
               desc: "policyseal is a crypto leaf — no keys"
+
+        # ── bip322 is a pure crypto leaf: domain + stdlib + btcd primitives ONLY ──
+        # It implements BIP-322 "simple" message sign/verify over txscript/wire and
+        # never imports the core, a frontend, OR another daxib provider (the keys
+        # provider imports IT to sign; the reverse is forbidden). It must also stay
+        # offline-safe: no btcd/blockchain or btcd/mempool (which drag the chainstate
+        # tree in and threaten the CGO0+windows build).
+        bip322:
+          files:
+            - "**/internal/bip322/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/service
+              desc: "bip322 is a crypto leaf — never the core"
+            - pkg: github.com/daxchain-io/daxib/internal/cli
+              desc: "bip322 is a crypto leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/mcpserver
+              desc: "bip322 is a crypto leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "bip322 is a leaf — keys imports it to sign, not the reverse"
+            - pkg: github.com/btcsuite/btcd/blockchain
+              desc: "bip322 must not import btcd/blockchain (offline-safe CGO0+windows build)"
+            - pkg: github.com/btcsuite/btcd/mempool
+              desc: "bip322 must not import btcd/mempool (offline-safe CGO0+windows build)"
 
         # ── policy is a state provider leaf: domain + policyseal + fsx + secret ──
         # It never imports the core (service), a frontend, OR the journal (service

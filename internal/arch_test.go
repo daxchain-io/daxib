@@ -90,7 +90,7 @@ var providerNames = map[string]bool{
 	"keys": true, "descriptor": true, "backend": true, "coinselect": true,
 	"psbt": true, "policy": true, "policyseal": true, "journal": true,
 	"registry": true, "config": true, "secret": true, "fsx": true,
-	"btcunit": true, "fee": true,
+	"btcunit": true, "fee": true, "bip322": true, "contacts": true,
 }
 
 // frontendRoots are the package-path leaders (relative to internalPrefix) that

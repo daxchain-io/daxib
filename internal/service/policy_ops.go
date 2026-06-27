@@ -180,6 +180,16 @@ func (s *Service) PolicyDeny(ctx context.Context, in PolicyPinInput) (PolicyMuta
 }
 
 func (s *Service) pinMutation(ctx context.Context, in PolicyPinInput, allow bool) (PolicyMutationResult, error) {
+	// Resolve a contact NAME to its pinned address first (a raw address falls
+	// through unchanged), so `policy allow <contact-name>` pins the same address a
+	// `tx send --to <contact-name>` would pay. A --remove by name resolves the same
+	// way so the pin can be lifted by the name it was added under.
+	resolved, rerr := s.resolveDestination(ctx, in.Address)
+	if rerr != nil {
+		return PolicyMutationResult{}, rerr
+	}
+	in.Address = resolved
+
 	// Validate the address decodes for the active network (a bad pin is a usage error).
 	if !in.Remove {
 		if err := s.validateAddress(in.Address); err != nil {

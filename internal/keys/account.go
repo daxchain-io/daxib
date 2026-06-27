@@ -196,6 +196,35 @@ func (s *Store) ScanAddresses(ctx context.Context, walletName string, gap uint32
 	return network, out, nil
 }
 
+// AddressAt derives (read-only, no passphrase) the P2WPKH address at
+// (wallet, branch, index) from the wallet's stored neutered xpub. It does NOT
+// materialize the address or advance any watermark — it is a pure lookup used to
+// resolve a "<wallet>/<branch>/<index>" ref (e.g. for message signing). An unknown
+// wallet is wallet.not_found.
+func (s *Store) AddressAt(ctx context.Context, walletName string, branch domain.Branch, index uint32) (DerivedAddress, error) {
+	meta, err := s.loadMeta()
+	if err != nil {
+		return DerivedAddress{}, err
+	}
+	_, w, ok := meta.findWalletByName(walletName)
+	if !ok {
+		return DerivedAddress{}, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	}
+	network := domain.Network(w.Network)
+	addr, err := addressFromAccountXpub(w.AccountXpub, network, branch, index)
+	if err != nil {
+		return DerivedAddress{}, err
+	}
+	return DerivedAddress{
+		Wallet:  walletName,
+		Network: network,
+		Branch:  branch,
+		Index:   index,
+		Address: addr,
+		Path:    fullPath(network, branch, index),
+	}, nil
+}
+
 // DefaultWallet returns the keystore's default wallet name (meta default_wallet),
 // or "" when none is set.
 func (s *Store) DefaultWallet(ctx context.Context) (string, bool) {

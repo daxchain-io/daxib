@@ -76,3 +76,21 @@ func (f *adminNewFlags) bind(cmd *cobra.Command) {
 	fl.BoolVar(&f.stdin, "new-admin-passphrase-stdin", false, "read the NEW policy admin passphrase from stdin")
 	fl.StringVar(&f.file, "new-admin-passphrase-file", "", "read the NEW policy admin passphrase from a file")
 }
+
+// newPassphraseFlags binds the NEW keystore-passphrase channel (+ its mandatory
+// confirmation) for `keystore change-passphrase`. The new passphrase is INDEPENDENT
+// of the old --passphrase-* channel and never arrives as a flag VALUE.
+type newPassphraseFlags struct {
+	stdin        bool
+	file         string
+	confirmStdin bool
+	confirmFile  string
+}
+
+func (f *newPassphraseFlags) bind(cmd *cobra.Command) {
+	fl := cmd.Flags()
+	fl.BoolVar(&f.stdin, "new-passphrase-stdin", false, "read the NEW keystore passphrase from stdin")
+	fl.StringVar(&f.file, "new-passphrase-file", "", "read the NEW keystore passphrase from a file (perms checked)")
+	fl.BoolVar(&f.confirmStdin, "new-passphrase-confirm-stdin", false, "confirm the NEW keystore passphrase from stdin")
+	fl.StringVar(&f.confirmFile, "new-passphrase-confirm-file", "", "confirm the NEW keystore passphrase from a file")
+}

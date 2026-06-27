@@ -54,6 +54,43 @@ func ParseAmountToSats(s string) (int64, error) {
 	}
 }
 
+// AmountUnit is the canonical source unit an amount string carries: UnitSat for an
+// explicit "sat"/"sats" suffix, UnitBTC for a "btc" suffix OR a bare number (the
+// sendtoaddress convention ParseAmountToSats encodes). It is the one place the
+// unit-detection rule lives so `convert` and the parser agree on what a string
+// means.
+type AmountUnit string
+
+const (
+	UnitSat AmountUnit = "sat"
+	UnitBTC AmountUnit = "btc"
+)
+
+// Other returns the opposite unit (sat↔btc). It is the default `convert` target
+// when no explicit to-unit is given.
+func (u AmountUnit) Other() AmountUnit {
+	if u == UnitSat {
+		return UnitBTC
+	}
+	return UnitSat
+}
+
+// SourceUnit reports the unit an amount string denotes WITHOUT parsing the
+// number: a "sat"/"sats" suffix is UnitSat, a "btc" suffix or a bare number is
+// UnitBTC. It shares the exact suffix-precedence ladder ParseAmountToSats uses, so
+// convert can echo the resolved source unit and pick the default target unit (the
+// OTHER unit) consistently with how the value is parsed.
+func SourceUnit(s string) AmountUnit {
+	lower := strings.ToLower(strings.TrimSpace(s))
+	switch {
+	case strings.HasSuffix(lower, "sats"), strings.HasSuffix(lower, "sat"):
+		return UnitSat
+	default:
+		// "btc" suffix or a bare number both resolve to BTC.
+		return UnitBTC
+	}
+}
+
 // parseSatSuffix parses the integer-sat body of an "<n>sat" amount. Sats are
 // whole integers — a decimal point is invalid here.
 func parseSatSuffix(orig, body string) (int64, error) {
