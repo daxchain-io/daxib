@@ -287,7 +287,7 @@ func TestRegtestSendConfirmRBF(t *testing.T) {
 	}
 	// Confirm it; daxib must report confirmed.
 	n.mine(t, 1)
-	st := d.mustJSON(t, "tx", "status", txid, "--wallet", "rt")
+	st := d.mustJSON(t, "tx", "status", txid)
 	if s := lowerField(st, "status", "state"); !strings.Contains(s, "confirm") {
 		t.Fatalf("tx %s not confirmed per daxib: %v", txid, st)
 	}
@@ -311,7 +311,7 @@ func TestRegtestSendConfirmRBF(t *testing.T) {
 	}
 	// Confirm the replacement.
 	n.mine(t, 1)
-	rst := d.mustJSON(t, "tx", "status", repTxid, "--wallet", "rt")
+	rst := d.mustJSON(t, "tx", "status", repTxid)
 	if s := lowerField(rst, "status", "state"); !strings.Contains(s, "confirm") {
 		t.Fatalf("replacement %s not confirmed per daxib: %v", repTxid, rst)
 	}
