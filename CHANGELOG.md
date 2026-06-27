@@ -6,9 +6,12 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Pre-alpha. The v1 feature set is complete on `main` but unreleased — interfaces
-may still change before the first tagged release. Use a testnet and a small
-mainnet float while evaluating.
+## [0.1.0] - 2026-06-27
+
+First release — a cosign-signed GitHub Release, a Homebrew cask
+(`brew install --cask daxchain-io/tap/daxib`), and a multi-arch GHCR image. Alpha:
+the CLI surface and JSON schemas may still change before v1.0. Use a testnet and a
+small mainnet float while evaluating.
 
 ### Added
 
@@ -52,6 +55,13 @@ mainnet float while evaluating.
   lifting the guardrail.
 - The broadcast reject-classifier is conservative: transient/unknown backend
   errors leave a record recoverable instead of terminalizing a possibly-live tx.
+
+### Fixed
+
+- `internal/fsx` `TestWriteAtomicCreatesAt0600` asserted POSIX `0600` permissions,
+  which don't hold on Windows (Go reports `0666`; owner-only access is enforced by a
+  DACL in `perms_windows.go`). The assertion is now POSIX-only, turning the
+  windows-latest / windows-11-arm CI test jobs green.
 
 ### Validated
 

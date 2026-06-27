@@ -9,9 +9,12 @@ inherit from daxie wholesale, (2) what we drop because it does not exist on Bitc
 and (3) the *uniquely Bitcoin* capabilities that have no daxie analog — several of
 which make daxib **structurally more secure than daxie can be on Ethereum**.
 
-> Status: planning. Nothing is built yet. The repo currently contains only
-> `.claude/` and these docs. This is a map, not a contract — open decisions are
-> flagged at the end.
+> Status: **mostly implemented and released as `v0.1.0`.** This was the original
+> planning artifact; it is kept as the design record + roadmap. The core (M1–M6),
+> testnet4, and RBF shipped; for the current built surface see the
+> [README](../README.md) and [CHANGELOG](../CHANGELOG.md). Items still marked
+> "forward path" / "deferred" below (BIP-322, the standalone PSBT noun,
+> Runes/Ordinals, watch-only, Miniscript, Lightning) are **not** in v0.1.0.
 
 ---
 
