@@ -59,6 +59,8 @@ On **testnet**, against a free public Esplora backend (no node required):
 
 ```sh
 # 1. Create a wallet (shows the mnemonic ONCE; encrypts it under your keystore passphrase).
+#    Wallets are NETWORK-AGNOSTIC by default: this one wallet works on every
+#    network. --network here only picks which HRP the printed receive address uses.
 daxib wallet create treasury --network testnet
 
 # 2. Point at a backend — your own bitcoind (Core RPC) or a light Esplora server.
@@ -122,7 +124,7 @@ documented exit code.
 
 | Noun | Verbs |
 |---|---|
-| `wallet` | `create` · `import` · `list` · `show` · `export` |
+| `wallet` | `create` · `import` · `list` · `show` · `export` · `upgrade` (bound → agnostic) |
 | `keystore` | `info` · `change-passphrase` (atomic, crash-safe re-encryption) |
 | `address` | `new` · `list` (BIP-84 receive / `--change`) |
 | `receive` | wait for inbound funds — emits the address, then blocks until paid |
@@ -138,7 +140,13 @@ documented exit code.
 | `mcp` | `serve` · `tools` |
 | utility | `version` · `convert` (sat ⇄ BTC) · `completion` (bash/zsh/fish/powershell) |
 
-Network is a global `--network mainnet\|testnet\|testnet4\|signet\|regtest` flag.
+Network is a global `--network mainnet\|testnet\|testnet4\|signet\|regtest` flag
+that selects the active network for a command. Wallets are **network-agnostic by
+default** — one wallet works on every network, and `--network` simply picks which
+network the command operates on (and which HRP its addresses use). Create a wallet
+with `--bind` to lock it to a single network; a bound wallet refuses ops (including
+`sign message`) on any other active network with `usage.network_mismatch` (exit 2).
+`wallet upgrade <name>` promotes a bound (or older, migrated) wallet to agnostic.
 
 **Exit codes (stable):** `0` ok · `2` usage · `3` policy-denied · `4` auth (passphrase)
 · `5` insufficient funds · `6` backend/network · `8` timeout-pending / seal · `10`

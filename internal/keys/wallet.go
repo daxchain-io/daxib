@@ -14,9 +14,13 @@ import (
 
 // CreateResult is the outcome of CreateWallet/ImportWallet. The Mnemonic /
 // BIP39Pass are owning *secret.Bytes the caller MUST zero (CreateWallet returns
-// the freshly generated mnemonic so the service can display it once).
+// the freshly generated mnemonic so the service can display it once). Network /
+// PathPrefix / AccountXpub / Receive0Address are for the DISPLAYED coin_type (the
+// resolved active/hint network for an agnostic wallet, the bound network for a
+// bound one). Scope is "agnostic" or "bound".
 type CreateResult struct {
 	WalletID        string
+	Scope           string
 	Network         domain.Network
 	PathPrefix      string
 	AccountXpub     string
@@ -25,11 +29,16 @@ type CreateResult struct {
 	BIP39Pass       *secret.Bytes // nil/empty when no passphrase
 }
 
-// WalletInfo is the read-only summary surfaced by list/show.
+// WalletInfo is the read-only summary surfaced by list/show, rendered against an
+// EFFECTIVE network: the bound network for a bound wallet, else the active network
+// passed in. Network/PathPrefix/AccountXpub/watermarks/Addresses reflect the
+// chain in view; CoinType is that chain's coin_type.
 type WalletInfo struct {
 	ID          string
 	Name        string
+	Scope       string
 	Network     domain.Network
+	CoinType    uint32
 	PathPrefix  string
 	AccountXpub string
 	NextReceive uint32
@@ -41,10 +50,12 @@ type WalletInfo struct {
 
 // CreateWallet generates a fresh BIP-39 mnemonic (128 bits for 12 words, 256 for
 // 24), encrypts it under pass, derives + records the first receive address (0/0),
-// and stores the neutered account xpub. It verifies/initializes the keystore
-// passphrase first (one-passphrase-per-keystore). The returned Mnemonic is the
-// caller's to zero (display once).
-func (s *Store) CreateWallet(ctx context.Context, name string, words int, network domain.Network, pass, confirm *secret.Bytes) (CreateResult, error) {
+// and stores the neutered account xpub(s). bind selects the scope: false (default)
+// yields an AGNOSTIC wallet (both coin_type chains stored, works on every network);
+// true yields a BOUND wallet locked to network. It verifies/initializes the
+// keystore passphrase first (one-passphrase-per-keystore). The returned Mnemonic
+// is the caller's to zero (display once).
+func (s *Store) CreateWallet(ctx context.Context, name string, words int, network domain.Network, bind bool, pass, confirm *secret.Bytes) (CreateResult, error) {
 	if !domain.ValidWalletName(name) {
 		return CreateResult{}, errKeysf(CodeUsageInvalidName, "invalid wallet name %q: use 1-64 chars [a-z0-9_-], starting with a letter or digit", name)
 	}
@@ -78,7 +89,7 @@ func (s *Store) CreateWallet(ctx context.Context, name string, words int, networ
 		// NFKD-normalize the sentence (BIP-39 §wordlist normalization).
 		mnemonicStr = norm.NFKD.String(mnemonicStr)
 
-		r, err := s.materializeWallet(meta, name, network, []byte(mnemonicStr), nil, pass.Reveal())
+		r, err := s.materializeWallet(meta, name, network, bind, []byte(mnemonicStr), nil, pass.Reveal())
 		if err != nil {
 			return err
 		}
@@ -94,9 +105,10 @@ func (s *Store) CreateWallet(ctx context.Context, name string, words int, networ
 
 // ImportWallet ingests an existing BIP-39 mnemonic (NFKD-normalized, checksum-
 // validated — a bad checksum is mnemonic.invalid, exit 2). bip39 is the optional
-// 25th-word passphrase (may be nil/empty). mnemonic/bip39 are the caller's to
-// zero. It verifies/initializes the keystore passphrase first.
-func (s *Store) ImportWallet(ctx context.Context, name string, network domain.Network, mnemonic, bip39pass, pass, confirm *secret.Bytes) (CreateResult, error) {
+// 25th-word passphrase (may be nil/empty). bind selects the scope (see
+// CreateWallet). mnemonic/bip39 are the caller's to zero. It verifies/initializes
+// the keystore passphrase first.
+func (s *Store) ImportWallet(ctx context.Context, name string, network domain.Network, bind bool, mnemonic, bip39pass, pass, confirm *secret.Bytes) (CreateResult, error) {
 	if !domain.ValidWalletName(name) {
 		return CreateResult{}, errKeysf(CodeUsageInvalidName, "invalid wallet name %q: use 1-64 chars [a-z0-9_-], starting with a letter or digit", name)
 	}
@@ -124,7 +136,7 @@ func (s *Store) ImportWallet(ctx context.Context, name string, network domain.Ne
 		if _, _, ok := meta.findWalletByName(name); ok {
 			return errKeysf(CodeWalletExists, "a wallet named %q already exists", name)
 		}
-		r, err := s.materializeWallet(meta, name, network, []byte(normalized), bipBytes, pass.Reveal())
+		r, err := s.materializeWallet(meta, name, network, bind, []byte(normalized), bipBytes, pass.Reveal())
 		if err != nil {
 			return err
 		}
@@ -137,31 +149,62 @@ func (s *Store) ImportWallet(ctx context.Context, name string, network domain.Ne
 	return res, nil
 }
 
-// materializeWallet is the shared create/import core: derive the account key +
-// neutered xpub, seal the mnemonic blob, derive the first receive address, and
-// write meta. Called under the exclusive lock with a verified passphrase. mnemonic
-// / bip39 are the caller's to zero (it copies them into the sealed blob). The seed
-// and derived keys are zeroed here.
-func (s *Store) materializeWallet(meta *metaFile, name string, network domain.Network, mnemonic, bip39pass, pass []byte) (CreateResult, error) {
+// agnosticNetworks are the two representative networks whose coin_types an
+// agnostic wallet stores: mainnet (ct0) and testnet (ct1, shared by every test
+// net). Deriving both under the single unlock makes the wallet network-agnostic.
+var agnosticNetworks = []domain.Network{domain.NetworkMainnet, domain.NetworkTestnet}
+
+// materializeWallet is the shared create/import core: derive the account key(s) +
+// neutered xpub(s), seal the mnemonic blob, materialize the first receive address
+// per chain, and write meta. Called under the exclusive lock with a verified
+// passphrase. For a BOUND wallet it derives ONLY network's coin_type chain; for an
+// AGNOSTIC wallet it derives BOTH coin_type chains. mnemonic / bip39 are the
+// caller's to zero (it copies them into the sealed blob). The seed and derived
+// keys are zeroed here.
+func (s *Store) materializeWallet(meta *metaFile, name string, network domain.Network, bind bool, mnemonic, bip39pass, pass []byte) (CreateResult, error) {
 	// Derive the BIP-32 seed from the mnemonic + optional passphrase.
 	seed := bip39.NewSeed(string(mnemonic), string(bip39pass))
 	defer zeroBytes(seed)
 
-	account, err := deriveAccountKey(seed, network)
-	if err != nil {
-		return CreateResult{}, err
-	}
-	defer account.Zero()
+	now := s.now()
 
-	xpub, err := neuterToXpub(account)
-	if err != nil {
-		return CreateResult{}, err
+	// The networks whose coin_type chains we materialize: one for bound, both for
+	// agnostic.
+	derivNets := agnosticNetworks
+	scope := scopeAgnostic
+	if bind {
+		derivNets = []domain.Network{network}
+		scope = scopeBound
 	}
 
-	// First receive address (0/0).
-	addr0, err := addressFromAccountXpub(xpub, network, domain.BranchReceive, 0)
-	if err != nil {
-		return CreateResult{}, err
+	chains := map[string]*metaChain{}
+	for _, dn := range derivNets {
+		account, err := deriveAccountKey(seed, dn)
+		if err != nil {
+			return CreateResult{}, err
+		}
+		xpub, nerr := neuterToXpub(account)
+		account.Zero()
+		if nerr != nil {
+			return CreateResult{}, nerr
+		}
+		// First receive address (0/0), encoded in the chain's CANONICAL HRP (dn).
+		addr0, aerr := addressFromAccountXpub(xpub, dn, domain.BranchReceive, 0)
+		if aerr != nil {
+			return CreateResult{}, aerr
+		}
+		key, kerr := coinKey(dn.CoinType())
+		if kerr != nil {
+			return CreateResult{}, kerr
+		}
+		chains[key] = &metaChain{
+			AccountXpub: xpub,
+			NextReceive: 1, // 0/0 is materialized
+			NextChange:  0,
+			Addresses: map[string]*metaAddress{
+				domain.AddressKey(domain.BranchReceive, 0): {Address: addr0, CreatedAt: now},
+			},
+		}
 	}
 
 	id := uuid.NewString()
@@ -173,18 +216,14 @@ func (s *Store) materializeWallet(meta *metaFile, name string, network domain.Ne
 		return CreateResult{}, err
 	}
 
-	now := s.now()
 	mw := &metaWallet{
-		Name:        name,
-		Network:     string(network),
-		CreatedAt:   now,
-		PathPrefix:  accountPathPrefix(network),
-		AccountXpub: xpub,
-		NextReceive: 1, // 0/0 is materialized below
-		NextChange:  0,
-		Addresses: map[string]*metaAddress{
-			domain.AddressKey(domain.BranchReceive, 0): {Address: addr0, CreatedAt: now},
-		},
+		Name:      name,
+		CreatedAt: now,
+		Scope:     scope,
+		Chains:    chains,
+	}
+	if bind {
+		mw.Network = string(network)
 	}
 	meta.Wallets[id] = mw
 	if meta.DefaultWallet == "" {
@@ -194,36 +233,134 @@ func (s *Store) materializeWallet(meta *metaFile, name string, network domain.Ne
 		return CreateResult{}, err
 	}
 
+	// The DISPLAYED coin_type: the bound network for bound; the requested
+	// (active/hint) network for agnostic. Both chains exist for agnostic, so the
+	// hint network's chain is always present.
+	dispNet := network
+	dispChain, ok := mw.chain(dispNet)
+	if !ok {
+		return CreateResult{}, errKeysf(CodeStateCorrupt, "internal: no chain for display network %q", dispNet)
+	}
+	dispAddr0, derr := addressFromAccountXpub(dispChain.AccountXpub, dispNet, domain.BranchReceive, 0)
+	if derr != nil {
+		return CreateResult{}, derr
+	}
+
 	var bipOut *secret.Bytes
 	if len(bip39pass) > 0 {
 		bipOut = secret.NewString(string(bip39pass))
 	}
 	return CreateResult{
 		WalletID:        id,
-		Network:         network,
-		PathPrefix:      mw.PathPrefix,
-		AccountXpub:     xpub,
-		Receive0Address: addr0,
+		Scope:           scope,
+		Network:         dispNet,
+		PathPrefix:      accountPathPrefix(dispNet),
+		AccountXpub:     dispChain.AccountXpub,
+		Receive0Address: dispAddr0,
 		BIP39Pass:       bipOut,
 	}, nil
 }
 
-// ListWallets returns every wallet's read-only summary, sorted by name.
-func (s *Store) ListWallets(ctx context.Context) ([]WalletInfo, error) {
+// WalletUpgrade promotes a BOUND (or migrated-legacy) wallet to AGNOSTIC: it
+// unlocks once under pass, derives the MISSING coin_type account xpub from the
+// seed, adds it as a second chain, sets Scope="agnostic", clears the bound
+// Network, and saves. An already-agnostic wallet is a usage error. One-time
+// passphrase.
+func (s *Store) WalletUpgrade(ctx context.Context, name string, net domain.Network, pass *secret.Bytes) (WalletInfo, error) {
+	if verr := s.VerifyPassphrase(pass); verr != nil {
+		return WalletInfo{}, verr
+	}
+	var out WalletInfo
+	werr := s.withLock(ctx, func() error {
+		meta, err := s.loadMeta()
+		if err != nil {
+			return err
+		}
+		wid, w, ok := meta.findWalletByName(name)
+		if !ok {
+			return errKeysf(CodeWalletNotFound, "no wallet named %q", name)
+		}
+		if !w.isBound() {
+			return errKeysf("usage.already_agnostic", "wallet %q is already network-agnostic", name)
+		}
+
+		wb, err := s.loadWalletBlob(wid)
+		if err != nil {
+			return err
+		}
+		mnemonic, bip39pass, oerr := s.openMnemonic(wb, pass.Reveal())
+		if oerr != nil {
+			return oerr
+		}
+		defer zeroBytes(mnemonic)
+		defer zeroBytes(bip39pass)
+
+		seed := bip39.NewSeed(string(mnemonic), string(bip39pass))
+		defer zeroBytes(seed)
+
+		now := s.now()
+		for _, dn := range agnosticNetworks {
+			key, kerr := coinKey(dn.CoinType())
+			if kerr != nil {
+				return kerr
+			}
+			if _, present := w.Chains[key]; present {
+				continue
+			}
+			account, derr := deriveAccountKey(seed, dn)
+			if derr != nil {
+				return derr
+			}
+			xpub, nerr := neuterToXpub(account)
+			account.Zero()
+			if nerr != nil {
+				return nerr
+			}
+			addr0, aerr := addressFromAccountXpub(xpub, dn, domain.BranchReceive, 0)
+			if aerr != nil {
+				return aerr
+			}
+			w.Chains[key] = &metaChain{
+				AccountXpub: xpub,
+				NextReceive: 1,
+				NextChange:  0,
+				Addresses: map[string]*metaAddress{
+					domain.AddressKey(domain.BranchReceive, 0): {Address: addr0, CreatedAt: now},
+				},
+			}
+		}
+		w.Scope = scopeAgnostic
+		w.Network = ""
+		if err := s.saveMeta(meta); err != nil {
+			return err
+		}
+		out = walletInfo(wid, w, meta.DefaultWallet, net)
+		return nil
+	})
+	if werr != nil {
+		return WalletInfo{}, werr
+	}
+	return out, nil
+}
+
+// ListWallets returns every wallet's read-only summary, sorted by name, rendered
+// against the effective network (bound network for a bound wallet, else net).
+func (s *Store) ListWallets(ctx context.Context, net domain.Network) ([]WalletInfo, error) {
 	meta, err := s.loadMeta()
 	if err != nil {
 		return nil, err
 	}
 	out := make([]WalletInfo, 0, len(meta.Wallets))
 	for id, w := range meta.Wallets {
-		out = append(out, walletInfo(id, w, meta.DefaultWallet))
+		out = append(out, walletInfo(id, w, meta.DefaultWallet, net))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
-// ShowWallet returns one wallet's summary by name.
-func (s *Store) ShowWallet(ctx context.Context, name string) (WalletInfo, error) {
+// ShowWallet returns one wallet's summary by name, rendered against the effective
+// network (bound network for a bound wallet, else net).
+func (s *Store) ShowWallet(ctx context.Context, name string, net domain.Network) (WalletInfo, error) {
 	meta, err := s.loadMeta()
 	if err != nil {
 		return WalletInfo{}, err
@@ -232,7 +369,7 @@ func (s *Store) ShowWallet(ctx context.Context, name string) (WalletInfo, error)
 	if !ok {
 		return WalletInfo{}, errKeysf(CodeWalletNotFound, "no wallet named %q", name)
 	}
-	return walletInfo(id, w, meta.DefaultWallet), nil
+	return walletInfo(id, w, meta.DefaultWallet, net), nil
 }
 
 // ExportWallet decrypts and returns a wallet's mnemonic + bip39 passphrase as
@@ -261,20 +398,40 @@ func (s *Store) ExportWallet(ctx context.Context, name string, pass *secret.Byte
 	return wid, secret.New(mn), secret.New(bp), nil
 }
 
-// walletInfo projects a metaWallet to a read-only WalletInfo.
-func walletInfo(id string, w *metaWallet, defaultName string) WalletInfo {
-	return WalletInfo{
-		ID:          id,
-		Name:        w.Name,
-		Network:     domain.Network(w.Network),
-		PathPrefix:  w.PathPrefix,
-		AccountXpub: w.AccountXpub,
-		NextReceive: w.NextReceive,
-		NextChange:  w.NextChange,
-		Addresses:   len(w.Addresses),
-		Default:     w.Name == defaultName,
-		CreatedAt:   w.CreatedAt,
+// effectiveNetwork is the network a wallet renders/derives against: the bound
+// network for a bound wallet (always its lock target), else the active net.
+func (w *metaWallet) effectiveNetwork(net domain.Network) domain.Network {
+	if w.isBound() {
+		if bn, err := domain.ParseNetwork(w.Network); err == nil {
+			return bn
+		}
 	}
+	return net
+}
+
+// walletInfo projects a metaWallet to a read-only WalletInfo against the effective
+// network. When the effective network's chain is absent (a bound wallet viewed off
+// its network should not happen, but be defensive), the chain-derived fields stay
+// zero.
+func walletInfo(id string, w *metaWallet, defaultName string, net domain.Network) WalletInfo {
+	eff := w.effectiveNetwork(net)
+	info := WalletInfo{
+		ID:         id,
+		Name:       w.Name,
+		Scope:      w.Scope,
+		Network:    eff,
+		CoinType:   eff.CoinType(),
+		PathPrefix: accountPathPrefix(eff),
+		Default:    w.Name == defaultName,
+		CreatedAt:  w.CreatedAt,
+	}
+	if c, ok := w.chain(eff); ok {
+		info.AccountXpub = c.AccountXpub
+		info.NextReceive = c.NextReceive
+		info.NextChange = c.NextChange
+		info.Addresses = len(c.Addresses)
+	}
+	return info
 }
 
 // entropyForWords maps a --words value to BIP-39 entropy bits (12 -> 128, 24 ->

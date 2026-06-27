@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/daxchain-io/daxib/internal/domain"
@@ -181,6 +182,130 @@ func TestServiceSignWrongPassphrase(t *testing.T) {
 	}
 	if c := code(t, err); c != "keystore.bad_passphrase" {
 		t.Fatalf("wrong-passphrase code=%s, want keystore.bad_passphrase", c)
+	}
+}
+
+// TestServiceSignBoundNetworkMismatch pins the scope guard on `sign message`: a
+// BOUND wallet refuses signing off its locked network with usage.network_mismatch
+// (exit 2), NOT wallet.not_found (exit 10). The slash-ref form is the regression
+// case — resolveSignRef derives via AddressAt, which on a bound wallet off its
+// network has no active-coin_type chain and would surface wallet.not_found if the
+// guard did not run first.
+func TestServiceSignBoundNetworkMismatch(t *testing.T) {
+	const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+	dir := t.TempDir()
+
+	openAt := func(net string) *Service {
+		env := map[string]string{
+			"DAXIB_KEYSTORE":           dir,
+			"DAXIB_KDF_LIGHT":          "1",
+			"DAXIB_PASSPHRASE":         "test-pass-12345678",
+			"DAXIB_PASSPHRASE_CONFIRM": "test-pass-12345678",
+		}
+		svc, err := Open(context.Background(), Options{
+			Keystore: dir, Network: net, KDFLight: true,
+			Secret: SecretIO{
+				Stdin:     bytesReader(mnemonic),
+				LookupEnv: func(k string) (string, bool) { v, ok := env[k]; return v, ok },
+				IsTTY:     func() bool { return false },
+				Prompt:    func(string) ([]byte, error) { return nil, errTestNoTTY },
+			},
+		})
+		if err != nil {
+			t.Fatalf("Open(%s): %v", net, err)
+		}
+		return svc
+	}
+	ctx := context.Background()
+
+	// Import a BOUND mainnet wallet (coin_type 0).
+	svcMain := openAt("mainnet")
+	if _, err := svcMain.WalletImport(ctx,
+		domain.WalletImportRequest{Name: "locked", Network: domain.NetworkMainnet, Bind: true},
+		WalletImportInput{MnemonicStdin: true}); err != nil {
+		t.Fatalf("WalletImport bound mainnet: %v", err)
+	}
+	_ = svcMain.Close()
+
+	// Reopen the SAME keystore on testnet (coin_type 1): the bound wallet has no
+	// chain for the active coin_type, so the chain-touching slash-ref path would
+	// hit wallet.not_found if the guard did not pre-empt it.
+	svcTest := openAt("testnet")
+	defer func() { _ = svcTest.Close() }()
+
+	// Slash-ref form (the regression case).
+	_, err := svcTest.MessageSign(ctx,
+		domain.MessageSignRequest{Ref: "locked/0/0", Message: "hi"},
+		MessageSignInput{Message: []byte("hi")})
+	if got := code(t, err); got != "usage.network_mismatch" {
+		t.Fatalf("slash-ref sign on bound off-network: code = %q, want usage.network_mismatch", got)
+	}
+
+	// Explicit --wallet hint on a bare-address ref must also be guarded.
+	_, err = svcTest.MessageSign(ctx,
+		domain.MessageSignRequest{Wallet: "locked", Ref: msgReceive0, Message: "hi"},
+		MessageSignInput{Message: []byte("hi")})
+	if got := code(t, err); got != "usage.network_mismatch" {
+		t.Fatalf("hinted bare-address sign on bound off-network: code = %q, want usage.network_mismatch", got)
+	}
+}
+
+// TestServiceSignAgnosticCrossNetwork asserts an AGNOSTIC wallet signs on any
+// active network (no scope guard): the same wallet signs+verifies on mainnet and
+// testnet, both exit 0.
+func TestServiceSignAgnosticCrossNetwork(t *testing.T) {
+	const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+	dir := t.TempDir()
+
+	openAt := func(net string) *Service {
+		env := map[string]string{
+			"DAXIB_KEYSTORE":           dir,
+			"DAXIB_KDF_LIGHT":          "1",
+			"DAXIB_PASSPHRASE":         "test-pass-12345678",
+			"DAXIB_PASSPHRASE_CONFIRM": "test-pass-12345678",
+		}
+		svc, err := Open(context.Background(), Options{
+			Keystore: dir, Network: net, KDFLight: true,
+			Secret: SecretIO{
+				Stdin:     bytesReader(mnemonic),
+				LookupEnv: func(k string) (string, bool) { v, ok := env[k]; return v, ok },
+				IsTTY:     func() bool { return false },
+				Prompt:    func(string) ([]byte, error) { return nil, errTestNoTTY },
+			},
+		})
+		if err != nil {
+			t.Fatalf("Open(%s): %v", net, err)
+		}
+		return svc
+	}
+	ctx := context.Background()
+
+	svcMain := openAt("mainnet")
+	if _, err := svcMain.WalletImport(ctx,
+		domain.WalletImportRequest{Name: "any"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+		t.Fatalf("WalletImport agnostic: %v", err)
+	}
+	mainSig, err := svcMain.MessageSign(ctx,
+		domain.MessageSignRequest{Ref: "any/0/0", Message: "hi"},
+		MessageSignInput{Message: []byte("hi")})
+	if err != nil {
+		t.Fatalf("MessageSign mainnet (agnostic): %v", err)
+	}
+	if mainSig.Address != msgReceive0 {
+		t.Fatalf("mainnet ref address = %q, want %q", mainSig.Address, msgReceive0)
+	}
+	_ = svcMain.Close()
+
+	svcTest := openAt("testnet")
+	defer func() { _ = svcTest.Close() }()
+	testSig, err := svcTest.MessageSign(ctx,
+		domain.MessageSignRequest{Ref: "any/0/0", Message: "hi"},
+		MessageSignInput{Message: []byte("hi")})
+	if err != nil {
+		t.Fatalf("MessageSign testnet (agnostic should not be guarded): %v", err)
+	}
+	if !strings.HasPrefix(testSig.Address, "tb1") {
+		t.Fatalf("testnet ref address = %q, want tb1...", testSig.Address)
 	}
 }
 

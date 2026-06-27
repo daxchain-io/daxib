@@ -27,7 +27,7 @@ func (s *Service) Balance(ctx context.Context, req domain.BalanceRequest) (domai
 		return domain.BalanceResult{}, err
 	}
 
-	_, scan, err := s.keys.ScanAddresses(ctx, wallet, gapWindow)
+	_, scan, err := s.keys.ScanAddresses(ctx, wallet, s.net, gapWindow)
 	if err != nil {
 		return domain.BalanceResult{}, err
 	}
@@ -91,7 +91,7 @@ func (s *Service) UTXOList(ctx context.Context, req domain.UTXOListRequest) (dom
 		return domain.UTXOListResult{}, err
 	}
 
-	_, scan, err := s.keys.ScanAddresses(ctx, wallet, gapWindow)
+	_, scan, err := s.keys.ScanAddresses(ctx, wallet, s.net, gapWindow)
 	if err != nil {
 		return domain.UTXOListResult{}, err
 	}

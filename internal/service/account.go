@@ -23,7 +23,7 @@ func (s *Service) AddressNew(ctx context.Context, req domain.AddressNewRequest) 
 	if req.Change {
 		branch = domain.BranchChange
 	}
-	d, err := s.keys.DeriveNext(ctx, wallet, branch)
+	d, err := s.keys.DeriveNext(ctx, wallet, s.net, branch)
 	if err != nil {
 		return domain.AddressNewResult{}, err
 	}
@@ -48,7 +48,7 @@ func (s *Service) AddressList(ctx context.Context, req domain.AddressListRequest
 		return domain.AddressListResult{}, err
 	}
 
-	network, addrs, err := s.keys.ListAddresses(ctx, wallet)
+	network, addrs, err := s.keys.ListAddresses(ctx, wallet, s.net)
 	if err != nil {
 		return domain.AddressListResult{}, err
 	}
@@ -69,16 +69,18 @@ func (s *Service) AddressList(ctx context.Context, req domain.AddressListRequest
 	return out, nil
 }
 
-// assertWalletNetwork enforces the §3.5 simplification: a wallet is bound to a
-// network at creation, and address ops require the active --network to match it.
-// A mismatch is a clear usage error rather than silently deriving a wrong-network
-// address.
+// assertWalletNetwork enforces the scope guard: a BOUND wallet is locked to one
+// network and refuses ops on any other active network (usage.network_mismatch,
+// exit 2); an AGNOSTIC wallet works on every network, so the guard is a no-op for
+// it. The check loads the wallet meta against the active network — for a bound
+// wallet ShowWallet renders the bound network into Network, so a mismatch is
+// w.Network != s.net.
 func (s *Service) assertWalletNetwork(ctx context.Context, wallet string) error {
-	w, err := s.keys.ShowWallet(ctx, wallet)
+	w, err := s.keys.ShowWallet(ctx, wallet, s.net)
 	if err != nil {
 		return err
 	}
-	if w.Network != s.net {
+	if w.Scope == "bound" && w.Network != s.net {
 		return domain.Newf("usage.network_mismatch",
 			"wallet %q is bound to network %q but the active network is %q; pass --network %s",
 			wallet, w.Network, s.net, w.Network)

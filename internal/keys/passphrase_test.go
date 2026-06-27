@@ -25,10 +25,10 @@ func seedTwoWallets(t *testing.T) (*Store, string) {
 		t.Fatalf("Open: %v", err)
 	}
 	ctx := context.Background()
-	if _, err := s.CreateWallet(ctx, "alpha", 12, domain.NetworkMainnet, pass("old-pass"), pass("old-pass")); err != nil {
+	if _, err := s.CreateWallet(ctx, "alpha", 12, domain.NetworkMainnet, false, pass("old-pass"), pass("old-pass")); err != nil {
 		t.Fatalf("CreateWallet alpha: %v", err)
 	}
-	if _, err := s.ImportWallet(ctx, "beta", domain.NetworkMainnet, secret.NewString(canonicalMnemonic), nil, pass("old-pass"), pass("old-pass")); err != nil {
+	if _, err := s.ImportWallet(ctx, "beta", domain.NetworkMainnet, false, secret.NewString(canonicalMnemonic), nil, pass("old-pass"), pass("old-pass")); err != nil {
 		t.Fatalf("ImportWallet beta: %v", err)
 	}
 	return s, dir

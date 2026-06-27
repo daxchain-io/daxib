@@ -134,9 +134,10 @@ func TestServiceConfirmRequired(t *testing.T) {
 	}
 }
 
-// TestServiceNetworkMismatch asserts address ops on a wallet bound to a different
-// network than the active one are refused with usage.network_mismatch.
-func TestServiceNetworkMismatch(t *testing.T) {
+// TestServiceBoundNetworkMismatch asserts address ops on a BOUND (--bind) wallet
+// locked to a different network than the active one are refused with
+// usage.network_mismatch.
+func TestServiceBoundNetworkMismatch(t *testing.T) {
 	const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 	svc, done := newTestService(t, map[string]string{
 		"DAXIB_PASSPHRASE":         "test-pass-12345678",
@@ -145,14 +146,70 @@ func TestServiceNetworkMismatch(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	// Import a TESTNET wallet while the service's active network is mainnet.
-	if _, err := svc.WalletImport(ctx, domain.WalletImportRequest{Name: "tnet", Network: domain.NetworkTestnet}, WalletImportInput{MnemonicStdin: true}); err != nil {
-		t.Fatalf("WalletImport testnet: %v", err)
+	// Import a BOUND testnet wallet while the service's active network is mainnet.
+	if _, err := svc.WalletImport(ctx, domain.WalletImportRequest{Name: "tnet", Network: domain.NetworkTestnet, Bind: true}, WalletImportInput{MnemonicStdin: true}); err != nil {
+		t.Fatalf("WalletImport bound testnet: %v", err)
 	}
-	// address new on the mainnet-active service must refuse the testnet wallet.
+	// address new on the mainnet-active service must refuse the bound testnet wallet.
 	_, err := svc.AddressNew(ctx, domain.AddressNewRequest{Wallet: "tnet"})
 	if got := code(t, err); got != "usage.network_mismatch" {
 		t.Fatalf("network-mismatch code = %q, want usage.network_mismatch", got)
+	}
+}
+
+// TestServiceAgnosticCrossNetwork asserts an AGNOSTIC (default) wallet works on
+// every network: the SAME wallet yields a bc1 address on mainnet and a tb1 address
+// on testnet, both with no error (no scope guard for an agnostic wallet).
+func TestServiceAgnosticCrossNetwork(t *testing.T) {
+	const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+	dir := t.TempDir()
+
+	openAt := func(net string) (*Service, func()) {
+		env := map[string]string{
+			"DAXIB_KEYSTORE":           dir,
+			"DAXIB_KDF_LIGHT":          "1",
+			"DAXIB_PASSPHRASE":         "test-pass-12345678",
+			"DAXIB_PASSPHRASE_CONFIRM": "test-pass-12345678",
+		}
+		svc, err := Open(context.Background(), Options{
+			Keystore: dir, Network: net, KDFLight: true,
+			Secret: SecretIO{
+				Stdin:     bytes.NewBufferString(mnemonic),
+				LookupEnv: func(k string) (string, bool) { v, ok := env[k]; return v, ok },
+				IsTTY:     func() bool { return false },
+				Prompt:    func(string) ([]byte, error) { return nil, errors.New("no TTY in test") },
+			},
+		})
+		if err != nil {
+			t.Fatalf("Open(%s): %v", net, err)
+		}
+		return svc, func() { _ = svc.Close() }
+	}
+	ctx := context.Background()
+
+	// Create an AGNOSTIC wallet on mainnet (the default; no Bind).
+	svcMain, closeMain := openAt("mainnet")
+	if _, err := svcMain.WalletImport(ctx, domain.WalletImportRequest{Name: "any"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+		t.Fatalf("WalletImport agnostic: %v", err)
+	}
+	mainAddr, err := svcMain.AddressNew(ctx, domain.AddressNewRequest{Wallet: "any"})
+	if err != nil {
+		t.Fatalf("AddressNew mainnet: %v", err)
+	}
+	closeMain()
+	if !strings.HasPrefix(mainAddr.Address, "bc1") {
+		t.Fatalf("mainnet address = %q, want bc1...", mainAddr.Address)
+	}
+
+	// Reopen the SAME keystore on testnet; the agnostic wallet derives there too.
+	svcTest, closeTest := openAt("testnet")
+	defer closeTest()
+	testAddr, err := svcTest.AddressNew(ctx, domain.AddressNewRequest{Wallet: "any"})
+	if err != nil {
+		t.Fatalf("AddressNew testnet (agnostic should not be guarded): %v", err)
+	}
+	if !strings.HasPrefix(testAddr.Address, "tb1") {
+		t.Fatalf("testnet address = %q, want tb1...", testAddr.Address)
 	}
 }
 

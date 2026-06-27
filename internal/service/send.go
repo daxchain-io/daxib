@@ -113,7 +113,7 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 
 	// 2. Derive the wallet's gap-window address set and index it by address so a
 	// selected UTXO maps to its (branch, index) for signing.
-	_, scan, err := s.keys.ScanAddresses(ctx, wallet, gapWindow)
+	_, scan, err := s.keys.ScanAddresses(ctx, wallet, s.net, gapWindow)
 	if err != nil {
 		return sendArtifact{}, err
 	}
@@ -196,9 +196,9 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 		var da keys.DerivedAddress
 		var derr error
 		if dryRun {
-			da, derr = s.keys.PeekNext(ctx, wallet, domain.BranchChange)
+			da, derr = s.keys.PeekNext(ctx, wallet, s.net, domain.BranchChange)
 		} else {
-			da, derr = s.keys.DeriveNext(ctx, wallet, domain.BranchChange)
+			da, derr = s.keys.DeriveNext(ctx, wallet, s.net, domain.BranchChange)
 		}
 		if derr != nil {
 			return sendArtifact{}, derr
@@ -275,7 +275,7 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 		return sendArtifact{}, perr
 	}
 	defer pass.Zero()
-	if err := s.keys.SignInputs(ctx, wallet, pass, tx, specs); err != nil {
+	if err := s.keys.SignInputs(ctx, wallet, s.net, pass, tx, specs); err != nil {
 		return sendArtifact{}, err
 	}
 

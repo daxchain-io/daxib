@@ -44,13 +44,13 @@ func (s *Service) Receive(ctx context.Context, req domain.ReceiveRequest, sink d
 	// listen burns nothing.
 	var address string
 	if req.New {
-		d, derr := s.keys.DeriveNext(ctx, wallet, domain.BranchReceive)
+		d, derr := s.keys.DeriveNext(ctx, wallet, s.net, domain.BranchReceive)
 		if derr != nil {
 			return domain.ReceiveResult{}, derr
 		}
 		address = d.Address
 	} else {
-		d, derr := s.keys.PeekNext(ctx, wallet, domain.BranchReceive)
+		d, derr := s.keys.PeekNext(ctx, wallet, s.net, domain.BranchReceive)
 		if derr != nil {
 			return domain.ReceiveResult{}, derr
 		}

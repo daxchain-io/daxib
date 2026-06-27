@@ -55,12 +55,12 @@ func TestAddressNewDefaultWalletCLI(t *testing.T) {
 	}
 }
 
-// TestAddressNewNetworkMismatchCLI asserts an address op against a wallet bound
-// to a different network than the active --network is refused with
+// TestAddressNewBoundNetworkMismatchCLI asserts an address op against a BOUND
+// wallet locked to a different network than the active --network is refused with
 // usage.network_mismatch (exit 2).
-func TestAddressNewNetworkMismatchCLI(t *testing.T) {
+func TestAddressNewBoundNetworkMismatchCLI(t *testing.T) {
 	isolateKeystore(t)
-	importVec(t, "tnet", "testnet")
+	importVecBound(t, "tnet", "testnet")
 	// Active network mainnet, wallet bound to testnet -> mismatch.
 	_, stderr, code := execCLI(t, "address", "new", "--wallet", "tnet", "--network", "mainnet", "--json")
 	if code != int(domain.ExitUsage) {
@@ -68,6 +68,30 @@ func TestAddressNewNetworkMismatchCLI(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "usage.network_mismatch") {
 		t.Errorf("error envelope missing usage.network_mismatch: %q", stderr)
+	}
+}
+
+// TestAddressNewAgnosticCrossNetworkCLI asserts an AGNOSTIC wallet derives on any
+// active network: the same wallet yields a bc1 address on mainnet and a tb1
+// address on testnet, both exit 0.
+func TestAddressNewAgnosticCrossNetworkCLI(t *testing.T) {
+	isolateKeystore(t)
+	importVec(t, "any", "mainnet") // agnostic (no --bind)
+
+	out, stderr, code := execCLI(t, "address", "new", "--wallet", "any", "--network", "mainnet")
+	if code != 0 {
+		t.Fatalf("address new mainnet exit = %d:\n%s", code, stderr)
+	}
+	if got := strings.TrimSpace(out); !strings.HasPrefix(got, "bc1") {
+		t.Fatalf("mainnet address = %q, want bc1...", got)
+	}
+
+	out, stderr, code = execCLI(t, "address", "new", "--wallet", "any", "--network", "testnet")
+	if code != 0 {
+		t.Fatalf("address new testnet (agnostic) exit = %d:\n%s", code, stderr)
+	}
+	if got := strings.TrimSpace(out); !strings.HasPrefix(got, "tb1") {
+		t.Fatalf("testnet address = %q, want tb1...", got)
 	}
 }
 

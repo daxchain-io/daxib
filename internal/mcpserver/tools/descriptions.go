@@ -18,7 +18,9 @@ package tools
 // The rest follow the §6.2 conventions: amounts are decimal BTC or integer-sat
 // strings (never floats — a satoshi count must round-trip exactly); to/recipient
 // accept a bech32/base58 Bitcoin address; wallet is optional everywhere (empty =
-// the default wallet); network is the active --network (a wallet is bound to one).
+// the default wallet); network is the active --network. A wallet is network-
+// agnostic by default (one wallet works on every network); a wallet created with
+// --bind is locked to a single network and refuses ops on any other.
 
 // ── read/list (no signing, no policy) ────────────────────────────────────────
 
@@ -26,9 +28,9 @@ const descBalance = "Read a wallet's confirmed + unconfirmed balance on the acti
 
 const descUTXOList = "List a wallet's unspent transaction outputs (coins) on the active network: each coin's outpoint (txid:vout), address, value in sats + BTC, and confirmation depth, plus the total. Use this to inspect coin control before a send. 'wallet' is optional. Read-only."
 
-const descWalletList = "List the HD wallets in the keystore: names, ids, network, address counts, creation dates, and which is the default. Returns NON-SECRET grouping metadata only — never a mnemonic, seed, or key. Read-only."
+const descWalletList = "List the HD wallets in the keystore: names, ids, scope (agnostic or bound:<network>), the effective network and its coin_type, address counts, creation dates, and which is the default. Returns NON-SECRET grouping metadata only — never a mnemonic, seed, or key. Read-only."
 
-const descWalletShow = "Show one HD wallet by name: its id, network, BIP-84 derivation path prefix, account xpub, next receive/change index, and address count. NON-SECRET metadata only — never a mnemonic or seed. Read-only."
+const descWalletShow = "Show one HD wallet by name: its id, scope (agnostic or bound), the effective network and coin_type, BIP-84 derivation path prefix, account xpub, next receive/change index, and address count. An agnostic wallet renders against the active network; a bound wallet against its locked network. NON-SECRET metadata only — never a mnemonic or seed. Read-only."
 
 const descAddressList = "List a wallet's materialized addresses on the active network: each address's ref (wallet/branch/index), branch (0 receive, 1 change), index, the bech32 address, and creation time. 'wallet' is optional. Read-only."
 

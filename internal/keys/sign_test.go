@@ -23,13 +23,13 @@ func TestSignInputsEngineVerifies(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
 
-	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet,
+	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false,
 		secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw")); err != nil {
 		t.Fatalf("ImportWallet: %v", err)
 	}
 
 	// Compute the receive-0 and receive-1 pkScripts (the prevouts being spent).
-	_, scan, err := s.ScanAddresses(ctx, "vec", 2)
+	_, scan, err := s.ScanAddresses(ctx, "vec", domain.NetworkMainnet, 2)
 	if err != nil {
 		t.Fatalf("ScanAddresses: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestSignInputsEngineVerifies(t *testing.T) {
 	}
 	tx.AddTxOut(wire.NewTxOut(900_000, ins[0].script)) // 100k to fee
 
-	if err := s.SignInputs(ctx, "vec", pass("pw"), tx, specs); err != nil {
+	if err := s.SignInputs(ctx, "vec", domain.NetworkMainnet, pass("pw"), tx, specs); err != nil {
 		t.Fatalf("SignInputs: %v", err)
 	}
 
@@ -104,13 +104,13 @@ func TestSignInputsEngineVerifies(t *testing.T) {
 func TestSignInputsWrongPassphrase(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet,
+	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false,
 		secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw")); err != nil {
 		t.Fatalf("ImportWallet: %v", err)
 	}
 	tx := wire.NewMsgTx(2)
 	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, nil, nil))
-	err := s.SignInputs(ctx, "vec", pass("wrong-pw"), tx, []InputSigningSpec{{Index: 0}})
+	err := s.SignInputs(ctx, "vec", domain.NetworkMainnet, pass("wrong-pw"), tx, []InputSigningSpec{{Index: 0}})
 	if code := codeOf(t, err); code != CodeKeystoreBadPassphrase {
 		t.Fatalf("wrong passphrase code=%s, want %s", code, CodeKeystoreBadPassphrase)
 	}

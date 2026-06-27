@@ -32,6 +32,12 @@ type WalletExportInput struct {
 	PassphraseFile  string
 }
 
+// WalletUpgradeInput carries the frontend secret-source flags for `wallet upgrade`.
+type WalletUpgradeInput struct {
+	PassphraseStdin bool
+	PassphraseFile  string
+}
+
 // WalletCreate generates a fresh mnemonic, encrypts it, derives the first receive
 // address, and returns the once-only mnemonic in the result (Sensitive=true). The
 // keystore passphrase is verified (or, on first init, confirmed) first.
@@ -53,7 +59,7 @@ func (s *Service) WalletCreate(ctx context.Context, req domain.WalletCreateReque
 	}
 	defer confirm.Zero()
 
-	res, err := s.keys.CreateWallet(ctx, req.Name, req.Words, network, pass, confirm)
+	res, err := s.keys.CreateWallet(ctx, req.Name, req.Words, network, req.Bind, pass, confirm)
 	if err != nil {
 		return domain.WalletCreateResult{}, err
 	}
@@ -63,6 +69,7 @@ func (s *Service) WalletCreate(ctx context.Context, req domain.WalletCreateReque
 	out := domain.WalletCreateResult{
 		Name:            req.Name,
 		WalletID:        res.WalletID,
+		Scope:           res.Scope,
 		Network:         res.Network,
 		PathPrefix:      res.PathPrefix,
 		Receive0:        req.Name + "/0/0",
@@ -127,7 +134,7 @@ func (s *Service) WalletImport(ctx context.Context, req domain.WalletImportReque
 	}
 	defer confirm.Zero()
 
-	res, err := s.keys.ImportWallet(ctx, req.Name, network, mnemonic, bip39, pass, confirm)
+	res, err := s.keys.ImportWallet(ctx, req.Name, network, req.Bind, mnemonic, bip39, pass, confirm)
 	if err != nil {
 		return domain.WalletImportResult{}, err
 	}
@@ -136,6 +143,7 @@ func (s *Service) WalletImport(ctx context.Context, req domain.WalletImportReque
 	return domain.WalletImportResult{
 		Name:            req.Name,
 		WalletID:        res.WalletID,
+		Scope:           res.Scope,
 		Network:         res.Network,
 		PathPrefix:      res.PathPrefix,
 		Receive0:        req.Name + "/0/0",
@@ -146,7 +154,7 @@ func (s *Service) WalletImport(ctx context.Context, req domain.WalletImportReque
 
 // WalletList returns every wallet's summary.
 func (s *Service) WalletList(ctx context.Context, _ domain.WalletListRequest) (domain.WalletListResult, error) {
-	wallets, err := s.keys.ListWallets(ctx)
+	wallets, err := s.keys.ListWallets(ctx, s.net)
 	if err != nil {
 		return domain.WalletListResult{}, err
 	}
@@ -158,7 +166,9 @@ func (s *Service) WalletList(ctx context.Context, _ domain.WalletListRequest) (d
 		out.Wallets = append(out.Wallets, domain.WalletSummary{
 			Name:      w.Name,
 			WalletID:  w.ID,
+			Scope:     w.Scope,
 			Network:   w.Network,
+			CoinType:  w.CoinType,
 			Addresses: w.Addresses,
 			Default:   w.Default,
 			CreatedAt: w.CreatedAt,
@@ -169,14 +179,16 @@ func (s *Service) WalletList(ctx context.Context, _ domain.WalletListRequest) (d
 
 // WalletShow returns one wallet's detail.
 func (s *Service) WalletShow(ctx context.Context, req domain.WalletShowRequest) (domain.WalletShowResult, error) {
-	w, err := s.keys.ShowWallet(ctx, req.Name)
+	w, err := s.keys.ShowWallet(ctx, req.Name, s.net)
 	if err != nil {
 		return domain.WalletShowResult{}, err
 	}
 	return domain.WalletShowResult{
 		Name:        w.Name,
 		WalletID:    w.ID,
+		Scope:       w.Scope,
 		Network:     w.Network,
+		CoinType:    w.CoinType,
 		PathPrefix:  w.PathPrefix,
 		AccountXpub: w.AccountXpub,
 		NextReceive: w.NextReceive,
@@ -184,6 +196,30 @@ func (s *Service) WalletShow(ctx context.Context, req domain.WalletShowRequest) 
 		Addresses:   w.Addresses,
 		Default:     w.Default,
 		CreatedAt:   w.CreatedAt,
+	}, nil
+}
+
+// WalletUpgrade promotes a bound/legacy wallet to network-agnostic: it derives the
+// missing coin_type chain from the seed (one-time passphrase) so the wallet then
+// works on every network. An already-agnostic wallet is usage.already_agnostic.
+func (s *Service) WalletUpgrade(ctx context.Context, req domain.WalletUpgradeRequest, in WalletUpgradeInput) (domain.WalletUpgradeResult, error) {
+	pass, _, err := s.acquire(passphraseSpec(in.PassphraseStdin, in.PassphraseFile, false))
+	if err != nil {
+		return domain.WalletUpgradeResult{}, err
+	}
+	defer pass.Zero()
+
+	w, err := s.keys.WalletUpgrade(ctx, req.Name, s.net, pass)
+	if err != nil {
+		return domain.WalletUpgradeResult{}, err
+	}
+	return domain.WalletUpgradeResult{
+		Name:      w.Name,
+		WalletID:  w.ID,
+		Scope:     w.Scope,
+		Network:   w.Network,
+		CoinType:  w.CoinType,
+		Addresses: w.Addresses,
 	}, nil
 }
 

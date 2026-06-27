@@ -17,13 +17,13 @@ import (
 func TestDerivationWatermarkTripwire(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, pass("pw"), pass("pw")); err != nil {
+	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, pass("pw"), pass("pw")); err != nil {
 		t.Fatalf("CreateWallet: %v", err)
 	}
 	// Derive a couple more receive addresses so indices 0,1,2 are materialized and
 	// next_receive == 3.
 	for i := 0; i < 2; i++ {
-		if _, err := s.DeriveNext(ctx, "vec", domain.BranchReceive); err != nil {
+		if _, err := s.DeriveNext(ctx, "vec", domain.NetworkMainnet, domain.BranchReceive); err != nil {
 			t.Fatalf("DeriveNext: %v", err)
 		}
 	}
@@ -42,7 +42,9 @@ func TestDerivationWatermarkTripwire(t *testing.T) {
 		t.Fatalf("unmarshal meta: %v", err)
 	}
 	for _, w := range m.Wallets {
-		w.NextReceive = 1 // but indices 0,1,2 are materialized -> inconsistent
+		for _, c := range w.Chains {
+			c.NextReceive = 1 // but indices 0,1,2 are materialized -> inconsistent
+		}
 	}
 	out, err := json.MarshalIndent(&m, "", "  ")
 	if err != nil {

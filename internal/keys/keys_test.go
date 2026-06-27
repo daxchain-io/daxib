@@ -44,7 +44,7 @@ func TestCreateListShowRoundtrip(t *testing.T) {
 	ctx := context.Background()
 	p, c := pass("hunter2-correct"), pass("hunter2-correct")
 
-	res, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, p, c)
+	res, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, p, c)
 	if err != nil {
 		t.Fatalf("CreateWallet: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestCreateListShowRoundtrip(t *testing.T) {
 		t.Fatal("CreateWallet did not return an account xpub")
 	}
 
-	wallets, err := s.ListWallets(ctx)
+	wallets, err := s.ListWallets(ctx, domain.NetworkMainnet)
 	if err != nil {
 		t.Fatalf("ListWallets: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestCreateListShowRoundtrip(t *testing.T) {
 		t.Fatal("first wallet should be the default wallet")
 	}
 
-	w, err := s.ShowWallet(ctx, "vec")
+	w, err := s.ShowWallet(ctx, "vec", domain.NetworkMainnet)
 	if err != nil {
 		t.Fatalf("ShowWallet: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestCreateListShowRoundtrip(t *testing.T) {
 	}
 
 	// The auto-derived receive 0/0 must be present in the address list.
-	_, addrs, err := s.ListAddresses(ctx, "vec")
+	_, addrs, err := s.ListAddresses(ctx, "vec", domain.NetworkMainnet)
 	if err != nil {
 		t.Fatalf("ListAddresses: %v", err)
 	}
@@ -97,18 +97,18 @@ func TestDeriveNextAdvancesWatermark(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
 	p, c := pass("pw-correct-horse"), pass("pw-correct-horse")
-	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, p, c); err != nil {
+	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, p, c); err != nil {
 		t.Fatalf("CreateWallet: %v", err)
 	}
 
-	d1, err := s.DeriveNext(ctx, "vec", domain.BranchReceive)
+	d1, err := s.DeriveNext(ctx, "vec", domain.NetworkMainnet, domain.BranchReceive)
 	if err != nil {
 		t.Fatalf("DeriveNext receive: %v", err)
 	}
 	if d1.Index != 1 { // 0 was auto-derived on create
 		t.Fatalf("first DeriveNext index = %d, want 1", d1.Index)
 	}
-	d2, err := s.DeriveNext(ctx, "vec", domain.BranchChange)
+	d2, err := s.DeriveNext(ctx, "vec", domain.NetworkMainnet, domain.BranchChange)
 	if err != nil {
 		t.Fatalf("DeriveNext change: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestDeriveNextAdvancesWatermark(t *testing.T) {
 		t.Fatalf("first change DeriveNext = (idx %d, branch %d), want (0, change)", d2.Index, d2.Branch)
 	}
 
-	w, err := s.ShowWallet(ctx, "vec")
+	w, err := s.ShowWallet(ctx, "vec", domain.NetworkMainnet)
 	if err != nil {
 		t.Fatalf("ShowWallet: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestImportCanonicalVector(t *testing.T) {
 	ctx := context.Background()
 	p, c := pass("pw"), pass("pw")
 	mn := secret.NewString(canonicalMnemonic)
-	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, mn, nil, p, c)
+	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false, mn, nil, p, c)
 	if err != nil {
 		t.Fatalf("ImportWallet: %v", err)
 	}
@@ -147,11 +147,11 @@ func TestWrongPassphrase(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
 	// First init with the correct passphrase.
-	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, pass("right"), pass("right")); err != nil {
+	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, pass("right"), pass("right")); err != nil {
 		t.Fatalf("CreateWallet: %v", err)
 	}
 	// A second wallet under a WRONG passphrase must be rejected at the verifier.
-	_, err := s.CreateWallet(ctx, "other", 12, domain.NetworkMainnet, pass("wrong"), pass("wrong"))
+	_, err := s.CreateWallet(ctx, "other", 12, domain.NetworkMainnet, false, pass("wrong"), pass("wrong"))
 	if got := codeOf(t, err); got != CodeKeystoreBadPassphrase {
 		t.Fatalf("wrong-passphrase create code = %q, want %q", got, CodeKeystoreBadPassphrase)
 	}
@@ -167,7 +167,7 @@ func TestWrongPassphrase(t *testing.T) {
 func TestExportRoundtrip(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw"))
+	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false, secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw"))
 	if err != nil {
 		t.Fatalf("ImportWallet: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestBadChecksumImport(t *testing.T) {
 	ctx := context.Background()
 	// "abandon" x12 has a bad checksum (the canonical valid form ends in "about").
 	bad := "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
-	_, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, secret.NewString(bad), nil, pass("pw"), pass("pw"))
+	_, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false, secret.NewString(bad), nil, pass("pw"), pass("pw"))
 	if got := codeOf(t, err); got != CodeMnemonicInvalid {
 		t.Fatalf("bad-checksum import code = %q, want %q", got, CodeMnemonicInvalid)
 	}
@@ -206,12 +206,12 @@ func TestConfirmRequiredOnFirstInit(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
 	// No confirmation at all.
-	_, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, pass("pw"), nil)
+	_, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, pass("pw"), nil)
 	if got := codeOf(t, err); got != CodeKeystoreConfirmRequired {
 		t.Fatalf("missing-confirm code = %q, want %q", got, CodeKeystoreConfirmRequired)
 	}
 	// Mismatched confirmation.
-	_, err = s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, pass("pw"), pass("different"))
+	_, err = s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, pass("pw"), pass("different"))
 	if got := codeOf(t, err); got != CodeKeystoreConfirmRequired {
 		t.Fatalf("mismatched-confirm code = %q, want %q", got, CodeKeystoreConfirmRequired)
 	}
@@ -222,10 +222,10 @@ func TestConfirmRequiredOnFirstInit(t *testing.T) {
 func TestDuplicateWalletName(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, pass("pw"), pass("pw")); err != nil {
+	if _, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, pass("pw"), pass("pw")); err != nil {
 		t.Fatalf("CreateWallet: %v", err)
 	}
-	_, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, pass("pw"), nil)
+	_, err := s.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, pass("pw"), nil)
 	if got := codeOf(t, err); got != CodeWalletExists {
 		t.Fatalf("duplicate-name code = %q, want %q", got, CodeWalletExists)
 	}
@@ -235,7 +235,7 @@ func TestDuplicateWalletName(t *testing.T) {
 func TestWordsValidation(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	_, err := s.CreateWallet(ctx, "vec", 15, domain.NetworkMainnet, pass("pw"), pass("pw"))
+	_, err := s.CreateWallet(ctx, "vec", 15, domain.NetworkMainnet, false, pass("pw"), pass("pw"))
 	if got := codeOf(t, err); got != CodeUsageWords {
 		t.Fatalf("bad --words code = %q, want %q", got, CodeUsageWords)
 	}
@@ -255,7 +255,7 @@ func TestProductionKeystoreNotDowngradable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open prod: %v", err)
 	}
-	if _, err := prod.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, pass("pw"), pass("pw")); err != nil {
+	if _, err := prod.CreateWallet(ctx, "vec", 12, domain.NetworkMainnet, false, pass("pw"), pass("pw")); err != nil {
 		t.Fatalf("CreateWallet prod: %v", err)
 	}
 	_ = prod.Close()

@@ -13,8 +13,9 @@ package domain
 type WalletCreateRequest struct {
 	Name    string  `json:"name"`
 	Words   int     `json:"words,omitempty"` // 12 or 24; 0 => default (12)
-	Network Network `json:"network"`
-	Yes     bool    `json:"-"` // frontend confirmation flag; not serialized
+	Network Network `json:"network"`         // display hint (agnostic) or lock target (bound)
+	Bind    bool    `json:"bind,omitempty"`  // true => bound (locked) wallet; default agnostic
+	Yes     bool    `json:"-"`               // frontend confirmation flag; not serialized
 }
 
 // WalletCreateResult is the wire output for `wallet create`. The mnemonic is
@@ -23,7 +24,8 @@ type WalletCreateRequest struct {
 type WalletCreateResult struct {
 	Name             string  `json:"name"`
 	WalletID         string  `json:"wallet_id"`
-	Network          Network `json:"network"`
+	Scope            string  `json:"scope"`            // "agnostic" or "bound"
+	Network          Network `json:"network"`          // displayed coin_type's network
 	PathPrefix       string  `json:"path_prefix"`      // e.g. "m/84'/0'/0'"
 	Receive0         string  `json:"receive0"`         // "<name>/0/0"
 	Receive0Address  string  `json:"receive0_address"` // first receive bech32 address
@@ -41,7 +43,8 @@ type WalletCreateResult struct {
 // service acquires), never a flag value.
 type WalletImportRequest struct {
 	Name    string  `json:"name"`
-	Network Network `json:"network"`
+	Network Network `json:"network"`        // display hint (agnostic) or lock target (bound)
+	Bind    bool    `json:"bind,omitempty"` // true => bound (locked) wallet; default agnostic
 	Yes     bool    `json:"-"`
 }
 
@@ -49,6 +52,7 @@ type WalletImportRequest struct {
 type WalletImportResult struct {
 	Name            string  `json:"name"`
 	WalletID        string  `json:"wallet_id"`
+	Scope           string  `json:"scope"`
 	Network         Network `json:"network"`
 	PathPrefix      string  `json:"path_prefix"`
 	Receive0        string  `json:"receive0"`
@@ -65,7 +69,9 @@ type WalletListRequest struct{}
 type WalletSummary struct {
 	Name      string  `json:"name"`
 	WalletID  string  `json:"wallet_id"`
-	Network   Network `json:"network"`
+	Scope     string  `json:"scope"`     // "agnostic" or "bound"
+	Network   Network `json:"network"`   // effective network (bound network, else active)
+	CoinType  uint32  `json:"coin_type"` // active coin_type in view
 	Addresses int     `json:"addresses"`
 	Default   bool    `json:"default,omitempty"`
 	CreatedAt string  `json:"created_at"`
@@ -86,7 +92,9 @@ type WalletShowRequest struct {
 type WalletShowResult struct {
 	Name        string  `json:"name"`
 	WalletID    string  `json:"wallet_id"`
-	Network     Network `json:"network"`
+	Scope       string  `json:"scope"`     // "agnostic" or "bound"
+	Network     Network `json:"network"`   // effective network (bound network, else active)
+	CoinType    uint32  `json:"coin_type"` // active coin_type in view
 	PathPrefix  string  `json:"path_prefix"`
 	AccountXpub string  `json:"account_xpub"`
 	NextReceive uint32  `json:"next_receive"`
@@ -112,6 +120,25 @@ type WalletExportResult struct {
 	Mnemonic        string `json:"mnemonic"`
 	BIP39Passphrase string `json:"bip39_passphrase,omitempty"`
 	Sensitive       bool   `json:"sensitive"`
+}
+
+// ── wallet upgrade ─────────────────────────────────────────────────────────
+
+// WalletUpgradeRequest is the wire input for `wallet upgrade <name>` (promote a
+// bound/legacy wallet to network-agnostic).
+type WalletUpgradeRequest struct {
+	Name string `json:"name"`
+	Yes  bool   `json:"-"`
+}
+
+// WalletUpgradeResult is the wire output for `wallet upgrade`.
+type WalletUpgradeResult struct {
+	Name      string  `json:"name"`
+	WalletID  string  `json:"wallet_id"`
+	Scope     string  `json:"scope"` // "agnostic" after upgrade
+	Network   Network `json:"network"`
+	CoinType  uint32  `json:"coin_type"`
+	Addresses int     `json:"addresses"`
 }
 
 // ── address new ────────────────────────────────────────────────────────────

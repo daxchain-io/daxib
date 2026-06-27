@@ -50,12 +50,12 @@ type addressMatch struct {
 // walletHint, when non-empty, scopes the address lookup to that wallet (so an
 // address materialized in two wallets is disambiguated); empty searches all
 // wallets.
-func (s *Store) SignMessage(ctx context.Context, walletHint, address string, message []byte, pass *secret.Bytes) (SignMessageResult, error) {
+func (s *Store) SignMessage(ctx context.Context, walletHint, address string, net domain.Network, message []byte, pass *secret.Bytes) (SignMessageResult, error) {
 	if verr := s.VerifyPassphrase(pass); verr != nil {
 		return SignMessageResult{}, verr
 	}
 
-	match, err := s.findAddress(walletHint, address)
+	match, err := s.findAddress(walletHint, address, net)
 	if err != nil {
 		return SignMessageResult{}, err
 	}
@@ -102,11 +102,14 @@ func (s *Store) SignMessage(ctx context.Context, walletHint, address string, mes
 }
 
 // findAddress resolves a bech32 address to the (wallet, branch, index) that derives
-// it. It first checks the materialized meta.json addresses (the fast path), then
-// — to cover an address that was derived for a balance scan but not yet recorded —
+// it on the ACTIVE network. It searches ONLY the active-family (net.CoinType())
+// chain of each wallet: an agnostic wallet's ct1 chain on testnet, the bound
+// wallet's single chain when net matches. It first checks the materialized
+// meta.json addresses (re-encoding the cached canonical-HRP string for net), then
+// — to cover an address derived for a balance scan but not yet recorded —
 // re-derives a gap window per wallet and matches. walletHint scopes the search
 // when non-empty. No match is wallet.not_found.
-func (s *Store) findAddress(walletHint, address string) (addressMatch, error) {
+func (s *Store) findAddress(walletHint, address string, net domain.Network) (addressMatch, error) {
 	meta, err := s.loadMeta()
 	if err != nil {
 		return addressMatch{}, err
@@ -116,42 +119,50 @@ func (s *Store) findAddress(walletHint, address string) (addressMatch, error) {
 		if walletHint != "" && w.Name != walletHint {
 			continue
 		}
-		network := domain.Network(w.Network)
-		// Fast path: a materialized address recorded in meta.
-		for key, a := range w.Addresses {
-			if a.Address != address {
-				continue
-			}
+		chain, ok := w.chain(net)
+		if !ok {
+			continue
+		}
+		// Fast path: a materialized address, re-encoded for the active network.
+		for key := range chain.Addresses {
 			branch, idx, ok := parseAddressKey(key)
 			if !ok {
 				return addressMatch{}, errKeysf(CodeStateCorrupt, "wallet %q has a malformed address key %q", w.Name, key)
 			}
-			return addressMatch{walletID: id, walletName: w.Name, network: network, branch: branch, index: idx}, nil
+			derived, derr := addressFromAccountXpub(chain.AccountXpub, net, branch, idx)
+			if derr != nil {
+				return addressMatch{}, derr
+			}
+			if derived == address {
+				return addressMatch{walletID: id, walletName: w.Name, network: net, branch: branch, index: idx}, nil
+			}
 		}
 	}
 
-	// Slow path: re-derive a gap window per (matching) wallet and match. This finds
-	// an address that the wallet can derive but has not materialized in meta.
+	// Slow path: re-derive a gap window per (matching) wallet on the active family.
 	const scanGap = 100
 	for id, w := range meta.Wallets {
 		if walletHint != "" && w.Name != walletHint {
 			continue
 		}
-		network := domain.Network(w.Network)
+		chain, ok := w.chain(net)
+		if !ok {
+			continue
+		}
 		for _, b := range []struct {
 			branch domain.Branch
 			count  uint32
 		}{
-			{domain.BranchReceive, w.NextReceive + scanGap},
-			{domain.BranchChange, w.NextChange + scanGap},
+			{domain.BranchReceive, chain.NextReceive + scanGap},
+			{domain.BranchChange, chain.NextChange + scanGap},
 		} {
 			for i := uint32(0); i < b.count; i++ {
-				derived, derr := addressFromAccountXpub(w.AccountXpub, network, b.branch, i)
+				derived, derr := addressFromAccountXpub(chain.AccountXpub, net, b.branch, i)
 				if derr != nil {
 					return addressMatch{}, derr
 				}
 				if derived == address {
-					return addressMatch{walletID: id, walletName: w.Name, network: network, branch: b.branch, index: i}, nil
+					return addressMatch{walletID: id, walletName: w.Name, network: net, branch: b.branch, index: i}, nil
 				}
 			}
 		}

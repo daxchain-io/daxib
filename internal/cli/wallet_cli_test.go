@@ -15,13 +15,23 @@ const (
 	canonReceive1 = "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g" // m/84'/0'/0'/0/1
 )
 
-// importVec imports the canonical BIP-84 vector via --mnemonic-file and fails the
-// test on a non-zero exit.
+// importVec imports the canonical BIP-84 vector via --mnemonic-file as an
+// AGNOSTIC wallet (the default) and fails the test on a non-zero exit. --network
+// is the display hint here.
 func importVec(t *testing.T, name, network string) {
 	t.Helper()
 	mf := mnemonicFile(t)
 	if _, stderr, code := execCLI(t, "wallet", "import", name, "--mnemonic-file", mf, "--network", network); code != 0 {
 		t.Fatalf("import %s exit = %d:\n%s", name, code, stderr)
+	}
+}
+
+// importVecBound imports the canonical vector as a BOUND wallet locked to network.
+func importVecBound(t *testing.T, name, network string) {
+	t.Helper()
+	mf := mnemonicFile(t)
+	if _, stderr, code := execCLI(t, "wallet", "import", name, "--mnemonic-file", mf, "--network", network, "--bind"); code != 0 {
+		t.Fatalf("import bound %s exit = %d:\n%s", name, code, stderr)
 	}
 }
 

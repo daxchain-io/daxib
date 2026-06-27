@@ -33,6 +33,21 @@ type MessageSignInput struct {
 // unlocks the address's key under the keystore passphrase and signs. The base64
 // witness is the signature.
 func (s *Service) MessageSign(ctx context.Context, req domain.MessageSignRequest, in MessageSignInput) (domain.MessageSignResult, error) {
+	// Gate sign message under the scope guard like every other key op, BEFORE
+	// resolving the ref: a BOUND wallet refuses signing off its locked network
+	// (usage.network_mismatch, exit 2), an AGNOSTIC wallet is unaffected. We must
+	// run the guard first because resolveSignRef's <wallet>/<branch>/<index> path
+	// derives via AddressAt, which on a bound wallet off its network has no chain
+	// for the active coin_type and would fail with wallet.not_found (exit 10)
+	// before the guard ever ran. Enforce it whenever the owning wallet is known (a
+	// slash ref or an explicit --wallet hint); a bare address with no hint is
+	// resolved family-locally by findAddress anyway.
+	if hint := s.signRefWallet(req.Wallet, req.Ref); hint != "" {
+		if aerr := s.assertWalletNetwork(ctx, hint); aerr != nil {
+			return domain.MessageSignResult{}, aerr
+		}
+	}
+
 	address, walletHint, err := s.resolveSignRef(ctx, req.Wallet, req.Ref)
 	if err != nil {
 		return domain.MessageSignResult{}, err
@@ -44,7 +59,7 @@ func (s *Service) MessageSign(ctx context.Context, req domain.MessageSignRequest
 	}
 	defer pass.Zero()
 
-	res, err := s.keys.SignMessage(ctx, walletHint, address, in.Message, pass)
+	res, err := s.keys.SignMessage(ctx, walletHint, address, s.net, in.Message, pass)
 	if err != nil {
 		return domain.MessageSignResult{}, err
 	}
@@ -124,7 +139,7 @@ func (s *Service) resolveSignRef(ctx context.Context, walletFlag, ref string) (a
 		if !ok {
 			return "", "", domain.Newf(domain.CodeUsageBadAddress, "ref %q has a bad index", ref)
 		}
-		d, derr := s.keys.AddressAt(ctx, walletName, branch, index)
+		d, derr := s.keys.AddressAt(ctx, walletName, s.net, branch, index)
 		if derr != nil {
 			return "", "", derr
 		}
@@ -142,6 +157,28 @@ func (s *Service) resolveSignRef(ctx context.Context, walletFlag, ref string) (a
 		hint = s.wallet
 	}
 	return ref, hint, nil
+}
+
+// signRefWallet returns the wallet name a `sign` ref will be scoped to, WITHOUT
+// touching any derivation chain — so MessageSign can run the scope guard before
+// resolveSignRef derives. It mirrors resolveSignRef's hint logic: a slash ref
+// "<wallet>/<branch>/<index>" yields its leading wallet name; a bare address
+// yields the explicit --wallet flag, else the session default wallet. It returns
+// "" when no owning wallet is determinable (a bare address with no hint), in
+// which case the guard is skipped (findAddress resolves family-locally).
+func (s *Service) signRefWallet(walletFlag, ref string) string {
+	ref = strings.TrimSpace(ref)
+	if strings.Contains(ref, "/") {
+		parts := strings.Split(ref, "/")
+		if len(parts) == 3 && parts[0] != "" {
+			return parts[0]
+		}
+		return ""
+	}
+	if walletFlag != "" {
+		return walletFlag
+	}
+	return s.wallet
 }
 
 // parseBranch parses a "0"/"1" branch token.

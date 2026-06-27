@@ -298,7 +298,7 @@ func (s *Service) buildReplacement(ctx context.Context, wallet string, client in
 
 	// Map every wallet address in the gap window to its (branch, index) so each input
 	// (and any added input) signs with the right key.
-	_, scan, err := s.keys.ScanAddresses(ctx, wallet, gapWindow)
+	_, scan, err := s.keys.ScanAddresses(ctx, wallet, s.net, gapWindow)
 	if err != nil {
 		return sendArtifact{}, err
 	}
@@ -331,7 +331,7 @@ func (s *Service) buildReplacement(ctx context.Context, wallet string, client in
 	var recipSat int64
 
 	// Always derive a fresh change address for this replacement.
-	changeDA, derr := s.keys.DeriveNext(ctx, wallet, domain.BranchChange)
+	changeDA, derr := s.keys.DeriveNext(ctx, wallet, s.net, domain.BranchChange)
 	if derr != nil {
 		return sendArtifact{}, derr
 	}
@@ -509,7 +509,7 @@ func (s *Service) buildReplacement(ctx context.Context, wallet string, client in
 		return sendArtifact{}, perr
 	}
 	defer pass.Zero()
-	if err := s.keys.SignInputs(ctx, wallet, pass, repl, specs); err != nil {
+	if err := s.keys.SignInputs(ctx, wallet, s.net, pass, repl, specs); err != nil {
 		return sendArtifact{}, err
 	}
 

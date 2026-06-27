@@ -27,12 +27,14 @@ func newWalletCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newWalletListCmd(ctx, rs),
 		newWalletShowCmd(ctx, rs),
 		newWalletExportCmd(ctx, rs),
+		newWalletUpgradeCmd(ctx, rs),
 	)
 	return cmd
 }
 
 func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	var words int
+	var bind bool
 	var pf passphraseFlags
 	var cf confirmFlags
 	cmd := &cobra.Command{
@@ -41,7 +43,11 @@ func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		Long: "Generate a fresh BIP-39 mnemonic, show it ONCE, and encrypt it into the\n" +
 			"keystore. RECORD THE MNEMONIC: it is the only backup and is never shown\n" +
 			"again. On the first wallet, the keystore passphrase is confirmed by\n" +
-			"double-entry (a typo cannot fork the keystore).",
+			"double-entry (a typo cannot fork the keystore).\n\n" +
+			"By default the wallet is NETWORK-AGNOSTIC: one wallet works on every\n" +
+			"network (--network only picks which HRP the printed receive address uses).\n" +
+			"Pass --bind to lock the wallet to a single network (the resolved\n" +
+			"--network), refusing ops on any other.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := preflightMnemonicDisplay(rs.flags.Yes, rs.flags.Mode().JSON); err != nil {
@@ -58,7 +64,7 @@ func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			defer closeFn()
 
 			res, err := svc.WalletCreate(cmd.Context(), domain.WalletCreateRequest{
-				Name: args[0], Words: words, Network: network, Yes: rs.flags.Yes,
+				Name: args[0], Words: words, Network: network, Bind: bind, Yes: rs.flags.Yes,
 			}, service.WalletCreateInput{
 				PassphraseStdin: pf.stdin, PassphraseFile: pf.file,
 				ConfirmStdin: cf.stdin, ConfirmFile: cf.file,
@@ -79,7 +85,7 @@ func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 
 			return render.Result(cmd.OutOrStdout(), m, res, func(w io.Writer) {
-				render.Line(w, m, "wallet %q created (%s) on %s", res.Name, res.WalletID, res.Network)
+				render.Line(w, m, "wallet %q created (%s) — %s", res.Name, res.WalletID, scopeLabel(res.Scope, res.Network))
 				render.Line(w, m, "receive %s -> %s", res.Receive0, res.Receive0Address)
 				if disp.echoInResult {
 					render.Line(w, m, "")
@@ -93,12 +99,14 @@ func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&words, "words", 12, "mnemonic length: 12 or 24")
+	cmd.Flags().BoolVar(&bind, "bind", false, "lock the wallet to the active --network (default: network-agnostic)")
 	pf.bind(cmd)
 	cf.bind(cmd)
 	return cmd
 }
 
 func newWalletImportCmd(ctx context.Context, rs *rootState) *cobra.Command {
+	var bind bool
 	var pf passphraseFlags
 	var cf confirmFlags
 	var mf mnemonicFlags
@@ -108,7 +116,9 @@ func newWalletImportCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		Short: "Import an existing BIP-39 mnemonic",
 		Long: "Import a BIP-39 mnemonic (NFKD-normalized, checksum-validated). The\n" +
 			"mnemonic arrives via --mnemonic-stdin / --mnemonic-file (never a flag\n" +
-			"value). An optional BIP-39 passphrase (25th word) via --bip39-passphrase-*.",
+			"value). An optional BIP-39 passphrase (25th word) via --bip39-passphrase-*.\n\n" +
+			"By default the wallet is NETWORK-AGNOSTIC (works on every network); pass\n" +
+			"--bind to lock it to the active --network.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			network, err := flagNetwork(rs)
@@ -122,7 +132,7 @@ func newWalletImportCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			defer closeFn()
 
 			res, err := svc.WalletImport(cmd.Context(), domain.WalletImportRequest{
-				Name: args[0], Network: network, Yes: rs.flags.Yes,
+				Name: args[0], Network: network, Bind: bind, Yes: rs.flags.Yes,
 			}, service.WalletImportInput{
 				MnemonicStdin: mf.stdin, MnemonicFile: mf.file,
 				BIP39Stdin: bf.stdin, BIP39File: bf.file,
@@ -134,16 +144,26 @@ func newWalletImportCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			m := rs.flags.Mode()
 			return render.Result(cmd.OutOrStdout(), m, res, func(w io.Writer) {
-				render.Line(w, m, "wallet %q imported (%s) on %s", res.Name, res.WalletID, res.Network)
+				render.Line(w, m, "wallet %q imported (%s) — %s", res.Name, res.WalletID, scopeLabel(res.Scope, res.Network))
 				_, _ = io.WriteString(w, res.Receive0+" "+res.Receive0Address+"\n")
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&bind, "bind", false, "lock the wallet to the active --network (default: network-agnostic)")
 	pf.bind(cmd)
 	cf.bind(cmd)
 	mf.bind(cmd)
 	bf.bind(cmd)
 	return cmd
+}
+
+// scopeLabel renders a wallet's scope for human output: "agnostic" or
+// "bound to <net>".
+func scopeLabel(scope string, net domain.Network) string {
+	if scope == "bound" {
+		return "bound to " + string(net)
+	}
+	return "agnostic"
 }
 
 func newWalletListCmd(ctx context.Context, rs *rootState) *cobra.Command {
@@ -166,14 +186,14 @@ func newWalletListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			return render.Result(cmd.OutOrStdout(), m, res, func(w io.Writer) {
 				tbl := render.NewTable(w)
 				if !m.Quiet {
-					tbl.Row("NAME", "WALLET_ID", "NETWORK", "ADDRESSES", "DEFAULT", "CREATED")
+					tbl.Row("NAME", "WALLET_ID", "SCOPE", "NETWORK", "ADDRESSES", "DEFAULT", "CREATED")
 				}
 				for _, wl := range res.Wallets {
 					def := ""
 					if wl.Default {
 						def = "*"
 					}
-					tbl.Row(wl.Name, wl.WalletID, string(wl.Network), itoa(wl.Addresses), def, wl.CreatedAt)
+					tbl.Row(wl.Name, wl.WalletID, scopeColumn(wl.Scope, wl.Network), string(wl.Network), itoa(wl.Addresses), def, wl.CreatedAt)
 				}
 				_ = tbl.Flush()
 			})
@@ -202,7 +222,9 @@ func newWalletShowCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				tbl := render.NewTable(w)
 				tbl.Row("name", res.Name)
 				tbl.Row("wallet_id", res.WalletID)
+				tbl.Row("scope", scopeColumn(res.Scope, res.Network))
 				tbl.Row("network", string(res.Network))
+				tbl.Row("coin_type", itoa(int(res.CoinType)))
 				tbl.Row("path_prefix", res.PathPrefix)
 				tbl.Row("account_xpub", res.AccountXpub)
 				tbl.Row("next_receive", itoa(int(res.NextReceive)))
@@ -243,6 +265,47 @@ func newWalletExportCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				if res.BIP39Passphrase != "" {
 					_, _ = io.WriteString(w, "bip39-passphrase: "+res.BIP39Passphrase+"\n")
 				}
+			})
+		},
+	}
+	pf.bind(cmd)
+	return cmd
+}
+
+// scopeColumn renders the wallet-list/show SCOPE column: "agnostic" or
+// "bound:<net>".
+func scopeColumn(scope string, net domain.Network) string {
+	if scope == "bound" {
+		return "bound:" + string(net)
+	}
+	return "agnostic"
+}
+
+func newWalletUpgradeCmd(ctx context.Context, rs *rootState) *cobra.Command {
+	var pf passphraseFlags
+	cmd := &cobra.Command{
+		Use:   "upgrade <name>",
+		Short: "Promote a bound (or legacy) wallet to network-agnostic",
+		Long: "Derive the missing coin_type account key (one-time passphrase) so a wallet\n" +
+			"that was created with --bind — or migrated from an older keystore — works\n" +
+			"on every network. An already-agnostic wallet is a no-op error.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, closeFn, err := openService(ctx, rs)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+
+			res, err := svc.WalletUpgrade(cmd.Context(), domain.WalletUpgradeRequest{
+				Name: args[0], Yes: rs.flags.Yes,
+			}, service.WalletUpgradeInput{PassphraseStdin: pf.stdin, PassphraseFile: pf.file})
+			if err != nil {
+				return err
+			}
+			m := rs.flags.Mode()
+			return render.Result(cmd.OutOrStdout(), m, res, func(w io.Writer) {
+				render.Line(w, m, "wallet %q upgraded (%s) — now %s", res.Name, res.WalletID, scopeLabel(res.Scope, res.Network))
 			})
 		},
 	}

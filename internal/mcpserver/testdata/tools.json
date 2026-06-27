@@ -1207,7 +1207,7 @@
   },
   {
     "name": "wallet_list",
-    "description": "List the HD wallets in the keystore: names, ids, network, address counts, creation dates, and which is the default. Returns NON-SECRET grouping metadata only — never a mnemonic, seed, or key. Read-only.",
+    "description": "List the HD wallets in the keystore: names, ids, scope (agnostic or bound:\u003cnetwork\u003e), the effective network and its coin_type, address counts, creation dates, and which is the default. Returns NON-SECRET grouping metadata only — never a mnemonic, seed, or key. Read-only.",
     "inputSchema": {
       "additionalProperties": false,
       "type": "object"
@@ -1225,6 +1225,11 @@
               "addresses": {
                 "type": "integer"
               },
+              "coin_type": {
+                "maximum": 4294967295,
+                "minimum": 0,
+                "type": "integer"
+              },
               "created_at": {
                 "type": "string"
               },
@@ -1237,6 +1242,9 @@
               "network": {
                 "type": "string"
               },
+              "scope": {
+                "type": "string"
+              },
               "wallet_id": {
                 "type": "string"
               }
@@ -1244,7 +1252,9 @@
             "required": [
               "name",
               "wallet_id",
+              "scope",
               "network",
+              "coin_type",
               "addresses",
               "created_at"
             ],
@@ -1267,7 +1277,7 @@
   },
   {
     "name": "wallet_show",
-    "description": "Show one HD wallet by name: its id, network, BIP-84 derivation path prefix, account xpub, next receive/change index, and address count. NON-SECRET metadata only — never a mnemonic or seed. Read-only.",
+    "description": "Show one HD wallet by name: its id, scope (agnostic or bound), the effective network and coin_type, BIP-84 derivation path prefix, account xpub, next receive/change index, and address count. An agnostic wallet renders against the active network; a bound wallet against its locked network. NON-SECRET metadata only — never a mnemonic or seed. Read-only.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1287,6 +1297,11 @@
           "type": "string"
         },
         "addresses": {
+          "type": "integer"
+        },
+        "coin_type": {
+          "maximum": 4294967295,
+          "minimum": 0,
           "type": "integer"
         },
         "created_at": {
@@ -1314,6 +1329,9 @@
         "path_prefix": {
           "type": "string"
         },
+        "scope": {
+          "type": "string"
+        },
         "wallet_id": {
           "type": "string"
         }
@@ -1321,7 +1339,9 @@
       "required": [
         "name",
         "wallet_id",
+        "scope",
         "network",
+        "coin_type",
         "path_prefix",
         "account_xpub",
         "next_receive",

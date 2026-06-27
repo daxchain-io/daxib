@@ -40,6 +40,21 @@ non-interactive path, and a documented exit code:
 
 ### Changed
 
+- **Wallets are network-agnostic by default — one wallet, any network.** A
+  newly created or imported wallet now stores both BIP-44 coin_type account xpubs
+  (ct0 = mainnet, ct1 = all test nets) and derives addresses for whatever
+  `--network` is active (bc1 on mainnet, tb1 on testnet/testnet4/signet, bcrt1 on
+  regtest) from the same watermark. Pass `--bind` to `wallet create` / `wallet
+  import` to opt into a **locked** wallet that stores only one network's coin_type
+  and refuses ops on any other active network. The cross-network guard
+  (`usage.network_mismatch`, exit 2) now fires **only for bound wallets**, and now
+  also covers `sign message` (previously the one ungated key op) so a bound wallet
+  is consistently locked across every operation. `wallet upgrade <name>` promotes a
+  bound (or migrated-legacy) wallet to agnostic by deriving the missing coin_type.
+  `meta.json` is bumped to format **v2** (per-coin_type `chains` + `scope`), with a
+  lossless, passphrase-free on-read migration that maps every existing v1 wallet to
+  a **bound** v2 wallet (persisted on its next write).
+
 - **Default on-disk home is now a single `~/.daxib/` dotfolder** (holding `config.toml`,
   `keystore/`, and `state/`) instead of the platform XDG/AppData path
   (`~/.config/daxib` on Linux, `~/Library/Application Support/daxib` on macOS). One

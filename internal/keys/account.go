@@ -25,44 +25,71 @@ type AddressInfo struct {
 	CreatedAt string
 }
 
+// walletChain resolves the derivation chain for (wallet, net): the active
+// network's coin_type family. For an agnostic wallet both chains exist; for a
+// bound wallet the service's network guard guarantees net == the bound network
+// before any derivation, so its single chain is always present. A missing chain
+// is wallet.not_found (the caller addressed a coin_type the wallet does not hold
+// — an off-network bound wallet that slipped past the guard); the guard, not this
+// path, is what surfaces the usage.network_mismatch.
+func (m *metaFile) walletChain(walletName string, net domain.Network) (string, *metaWallet, *metaChain, error) {
+	id, w, ok := m.findWalletByName(walletName)
+	if !ok {
+		return "", nil, nil, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	}
+	c, ok := w.chain(net)
+	if !ok {
+		return "", nil, nil, errKeysf(CodeWalletNotFound,
+			"wallet %q has no derivation chain for network %q (coin_type %d)", walletName, net, net.CoinType())
+	}
+	return id, w, c, nil
+}
+
 // DeriveNext allocates the next unused index on the requested branch (receive or
-// change), derives the address from the wallet's stored neutered xpub (NO
-// passphrase needed, §3.5), records it in meta, advances the watermark, and
-// returns it. Runs under the exclusive lock.
-func (s *Store) DeriveNext(ctx context.Context, walletName string, branch domain.Branch) (DerivedAddress, error) {
+// change), derives the address for the ACTIVE network from the active coin_type
+// chain's neutered xpub (NO passphrase needed, §3.5), records it (in the chain's
+// canonical HRP) in meta, advances the chain's watermark (HRP-agnostic), and
+// returns the address encoded for net. Runs under the exclusive lock.
+func (s *Store) DeriveNext(ctx context.Context, walletName string, net domain.Network, branch domain.Branch) (DerivedAddress, error) {
 	var out DerivedAddress
 	werr := s.withLock(ctx, func() error {
 		meta, err := s.loadMeta()
 		if err != nil {
 			return err
 		}
-		_, w, ok := meta.findWalletByName(walletName)
-		if !ok {
-			return errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+		_, _, chain, cerr := meta.walletChain(walletName, net)
+		if cerr != nil {
+			return cerr
 		}
-		network := domain.Network(w.Network)
 
 		var index uint32
 		if branch == domain.BranchChange {
-			index = w.NextChange
+			index = chain.NextChange
 		} else {
-			index = w.NextReceive
+			index = chain.NextReceive
 		}
 
-		addr, err := addressFromAccountXpub(w.AccountXpub, network, branch, index)
+		// The address returned to the caller is encoded for the ACTIVE network.
+		addr, err := addressFromAccountXpub(chain.AccountXpub, net, branch, index)
+		if err != nil {
+			return err
+		}
+		// The cached string is recorded in the chain's CANONICAL HRP so list/scan can
+		// re-encode it for any active network deterministically.
+		cached, err := addressFromAccountXpub(chain.AccountXpub, canonicalNet(net), branch, index)
 		if err != nil {
 			return err
 		}
 
 		now := s.now()
-		if w.Addresses == nil {
-			w.Addresses = map[string]*metaAddress{}
+		if chain.Addresses == nil {
+			chain.Addresses = map[string]*metaAddress{}
 		}
-		w.Addresses[domain.AddressKey(branch, index)] = &metaAddress{Address: addr, CreatedAt: now}
+		chain.Addresses[domain.AddressKey(branch, index)] = &metaAddress{Address: cached, CreatedAt: now}
 		if branch == domain.BranchChange {
-			w.NextChange = index + 1
+			chain.NextChange = index + 1
 		} else {
-			w.NextReceive = index + 1
+			chain.NextReceive = index + 1
 		}
 		if err := s.saveMeta(meta); err != nil {
 			return err
@@ -70,11 +97,11 @@ func (s *Store) DeriveNext(ctx context.Context, walletName string, branch domain
 
 		out = DerivedAddress{
 			Wallet:  walletName,
-			Network: network,
+			Network: net,
 			Branch:  branch,
 			Index:   index,
 			Address: addr,
-			Path:    fullPath(network, branch, index),
+			Path:    fullPath(net, branch, index),
 		}
 		return nil
 	})
@@ -85,60 +112,63 @@ func (s *Store) DeriveNext(ctx context.Context, walletName string, branch domain
 }
 
 // PeekNext derives the address at the next unused index on the requested branch
-// WITHOUT recording it or advancing the watermark (a read-only preview, §3.5: from
-// the neutered xpub, no passphrase). It is used by `tx send --dry-run` so a no-op
-// preview never burns a change index / pollutes meta. The address it returns is
-// exactly what a subsequent DeriveNext on the same branch would allocate.
-func (s *Store) PeekNext(ctx context.Context, walletName string, branch domain.Branch) (DerivedAddress, error) {
+// for the ACTIVE network WITHOUT recording it or advancing the watermark (a
+// read-only preview, §3.5). Used by `tx send --dry-run`.
+func (s *Store) PeekNext(ctx context.Context, walletName string, net domain.Network, branch domain.Branch) (DerivedAddress, error) {
 	meta, err := s.loadMeta()
 	if err != nil {
 		return DerivedAddress{}, err
 	}
-	_, w, ok := meta.findWalletByName(walletName)
-	if !ok {
-		return DerivedAddress{}, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	_, _, chain, cerr := meta.walletChain(walletName, net)
+	if cerr != nil {
+		return DerivedAddress{}, cerr
 	}
-	network := domain.Network(w.Network)
 
 	var index uint32
 	if branch == domain.BranchChange {
-		index = w.NextChange
+		index = chain.NextChange
 	} else {
-		index = w.NextReceive
+		index = chain.NextReceive
 	}
-	addr, err := addressFromAccountXpub(w.AccountXpub, network, branch, index)
+	addr, err := addressFromAccountXpub(chain.AccountXpub, net, branch, index)
 	if err != nil {
 		return DerivedAddress{}, err
 	}
 	return DerivedAddress{
 		Wallet:  walletName,
-		Network: network,
+		Network: net,
 		Branch:  branch,
 		Index:   index,
 		Address: addr,
-		Path:    fullPath(network, branch, index),
+		Path:    fullPath(net, branch, index),
 	}, nil
 }
 
-// ListAddresses returns every materialized address for a wallet, sorted by
-// (branch, index). Lock-free read; no passphrase.
-func (s *Store) ListAddresses(ctx context.Context, walletName string) (domain.Network, []AddressInfo, error) {
+// ListAddresses returns every materialized address for a wallet, RE-ENCODED for
+// the ACTIVE network from the active coin_type chain (so an agnostic wallet shows
+// tb1 on testnet/signet, bcrt1 on regtest, from the SAME ct1 watermark), sorted by
+// (branch, index). Lock-free read; no passphrase. It never echoes the cached
+// canonical-HRP string verbatim for a different active HRP.
+func (s *Store) ListAddresses(ctx context.Context, walletName string, net domain.Network) (domain.Network, []AddressInfo, error) {
 	meta, err := s.loadMeta()
 	if err != nil {
 		return "", nil, err
 	}
-	_, w, ok := meta.findWalletByName(walletName)
-	if !ok {
-		return "", nil, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	_, _, chain, cerr := meta.walletChain(walletName, net)
+	if cerr != nil {
+		return "", nil, cerr
 	}
-	network := domain.Network(w.Network)
-	out := make([]AddressInfo, 0, len(w.Addresses))
-	for key, a := range w.Addresses {
+	out := make([]AddressInfo, 0, len(chain.Addresses))
+	for key, a := range chain.Addresses {
 		branch, idx, ok := parseAddressKey(key)
 		if !ok {
 			return "", nil, errKeysf(CodeStateCorrupt, "wallet %q has a malformed address key %q", walletName, key)
 		}
-		out = append(out, AddressInfo{Branch: branch, Index: idx, Address: a.Address, CreatedAt: a.CreatedAt})
+		addr, derr := addressFromAccountXpub(chain.AccountXpub, net, branch, idx)
+		if derr != nil {
+			return "", nil, derr
+		}
+		out = append(out, AddressInfo{Branch: branch, Index: idx, Address: addr, CreatedAt: a.CreatedAt})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Branch != out[j].Branch {
@@ -146,7 +176,7 @@ func (s *Store) ListAddresses(ctx context.Context, walletName string) (domain.Ne
 		}
 		return out[i].Index < out[j].Index
 	})
-	return network, out, nil
+	return net, out, nil
 }
 
 // ScanAddress is one address in a wallet's gap-window scan set, returned by
@@ -157,13 +187,11 @@ type ScanAddress struct {
 	Address string
 }
 
-// ScanAddresses derives the set of addresses to query for a balance/utxo scan: on
-// each branch, indices [0, next_<branch> + gap) derived from the wallet's stored
-// neutered xpub (NO passphrase, §3.5). This covers every already-handed-out
-// address plus a forward gap window so a balance still finds coins on addresses
-// the wallet generated but has not yet "used" via `address new`. It is a lock-free
-// read. A gap < 1 is clamped to 1.
-func (s *Store) ScanAddresses(ctx context.Context, walletName string, gap uint32) (domain.Network, []ScanAddress, error) {
+// ScanAddresses derives the set of addresses to query for a balance/utxo scan on
+// the ACTIVE network: on each branch, indices [0, next_<branch> + gap) derived from
+// the active coin_type chain's neutered xpub (NO passphrase, §3.5), encoded for
+// net. A gap < 1 is clamped to 1.
+func (s *Store) ScanAddresses(ctx context.Context, walletName string, net domain.Network, gap uint32) (domain.Network, []ScanAddress, error) {
 	if gap < 1 {
 		gap = 1
 	}
@@ -171,57 +199,55 @@ func (s *Store) ScanAddresses(ctx context.Context, walletName string, gap uint32
 	if err != nil {
 		return "", nil, err
 	}
-	_, w, ok := meta.findWalletByName(walletName)
-	if !ok {
-		return "", nil, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	_, _, chain, cerr := meta.walletChain(walletName, net)
+	if cerr != nil {
+		return "", nil, cerr
 	}
-	network := domain.Network(w.Network)
 
-	out := make([]ScanAddress, 0, w.NextReceive+w.NextChange+2*gap)
+	out := make([]ScanAddress, 0, chain.NextReceive+chain.NextChange+2*gap)
 	for _, b := range []struct {
 		branch domain.Branch
 		count  uint32
 	}{
-		{domain.BranchReceive, w.NextReceive + gap},
-		{domain.BranchChange, w.NextChange + gap},
+		{domain.BranchReceive, chain.NextReceive + gap},
+		{domain.BranchChange, chain.NextChange + gap},
 	} {
 		for i := uint32(0); i < b.count; i++ {
-			addr, derr := addressFromAccountXpub(w.AccountXpub, network, b.branch, i)
+			addr, derr := addressFromAccountXpub(chain.AccountXpub, net, b.branch, i)
 			if derr != nil {
 				return "", nil, derr
 			}
 			out = append(out, ScanAddress{Branch: b.branch, Index: i, Address: addr})
 		}
 	}
-	return network, out, nil
+	return net, out, nil
 }
 
 // AddressAt derives (read-only, no passphrase) the P2WPKH address at
-// (wallet, branch, index) from the wallet's stored neutered xpub. It does NOT
-// materialize the address or advance any watermark — it is a pure lookup used to
-// resolve a "<wallet>/<branch>/<index>" ref (e.g. for message signing). An unknown
-// wallet is wallet.not_found.
-func (s *Store) AddressAt(ctx context.Context, walletName string, branch domain.Branch, index uint32) (DerivedAddress, error) {
+// (wallet, branch, index) for the ACTIVE network from the active coin_type chain's
+// neutered xpub. It does NOT materialize the address or advance any watermark — it
+// is a pure lookup used to resolve a "<wallet>/<branch>/<index>" ref (e.g. for
+// message signing). An unknown wallet is wallet.not_found.
+func (s *Store) AddressAt(ctx context.Context, walletName string, net domain.Network, branch domain.Branch, index uint32) (DerivedAddress, error) {
 	meta, err := s.loadMeta()
 	if err != nil {
 		return DerivedAddress{}, err
 	}
-	_, w, ok := meta.findWalletByName(walletName)
-	if !ok {
-		return DerivedAddress{}, errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	_, _, chain, cerr := meta.walletChain(walletName, net)
+	if cerr != nil {
+		return DerivedAddress{}, cerr
 	}
-	network := domain.Network(w.Network)
-	addr, err := addressFromAccountXpub(w.AccountXpub, network, branch, index)
+	addr, err := addressFromAccountXpub(chain.AccountXpub, net, branch, index)
 	if err != nil {
 		return DerivedAddress{}, err
 	}
 	return DerivedAddress{
 		Wallet:  walletName,
-		Network: network,
+		Network: net,
 		Branch:  branch,
 		Index:   index,
 		Address: addr,
-		Path:    fullPath(network, branch, index),
+		Path:    fullPath(net, branch, index),
 	}, nil
 }
 
@@ -233,4 +259,13 @@ func (s *Store) DefaultWallet(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	return meta.DefaultWallet, true
+}
+
+// canonicalNet maps a network to the representative network whose HRP is the
+// chain's CANONICAL cached form: mainnet for ct0, testnet (tb) for ct1.
+func canonicalNet(n domain.Network) domain.Network {
+	if n.CoinType() == 0 {
+		return domain.NetworkMainnet
+	}
+	return domain.NetworkTestnet
 }

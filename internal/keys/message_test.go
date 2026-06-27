@@ -18,7 +18,7 @@ import (
 func TestSignMessageRoundtrip(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet,
+	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false,
 		secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw"))
 	if err != nil {
 		t.Fatalf("ImportWallet: %v", err)
@@ -26,7 +26,7 @@ func TestSignMessageRoundtrip(t *testing.T) {
 	addr := res.Receive0Address
 
 	msg := []byte("daxib signs this")
-	sm, err := s.SignMessage(ctx, "vec", addr, msg, pass("pw"))
+	sm, err := s.SignMessage(ctx, "vec", addr, domain.NetworkMainnet, msg, pass("pw"))
 	if err != nil {
 		t.Fatalf("SignMessage: %v", err)
 	}
@@ -51,12 +51,12 @@ func TestSignMessageRoundtrip(t *testing.T) {
 func TestSignMessageWrongPassphrase(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet,
+	res, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false,
 		secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw"))
 	if err != nil {
 		t.Fatalf("ImportWallet: %v", err)
 	}
-	_, serr := s.SignMessage(ctx, "vec", res.Receive0Address, []byte("m"), pass("WRONG"))
+	_, serr := s.SignMessage(ctx, "vec", res.Receive0Address, domain.NetworkMainnet, []byte("m"), pass("WRONG"))
 	if code := codeOf(t, serr); code != CodeKeystoreBadPassphrase {
 		t.Fatalf("wrong-passphrase code=%s, want %s", code, CodeKeystoreBadPassphrase)
 	}
@@ -66,12 +66,12 @@ func TestSignMessageWrongPassphrase(t *testing.T) {
 func TestSignMessageUnknownAddress(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet,
+	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false,
 		secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw")); err != nil {
 		t.Fatalf("ImportWallet: %v", err)
 	}
 	const foreign = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080" // not derivable by this wallet
-	_, serr := s.SignMessage(ctx, "", foreign, []byte("m"), pass("pw"))
+	_, serr := s.SignMessage(ctx, "", foreign, domain.NetworkMainnet, []byte("m"), pass("pw"))
 	if code := codeOf(t, serr); code != CodeWalletNotFound {
 		t.Fatalf("unknown-address code=%s, want %s", code, CodeWalletNotFound)
 	}
@@ -83,17 +83,17 @@ func TestSignMessageUnknownAddress(t *testing.T) {
 func TestSignMessageGapWindowAddress(t *testing.T) {
 	s := openLight(t)
 	ctx := context.Background()
-	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet,
+	if _, err := s.ImportWallet(ctx, "vec", domain.NetworkMainnet, false,
 		secret.NewString(canonicalMnemonic), nil, pass("pw"), pass("pw")); err != nil {
 		t.Fatalf("ImportWallet: %v", err)
 	}
 	// receive index 5 is NOT materialized (only 0/0 is at import), but the wallet
 	// can derive it. AddressAt gives us the address; SignMessage must still find it.
-	d, err := s.AddressAt(ctx, "vec", domain.BranchReceive, 5)
+	d, err := s.AddressAt(ctx, "vec", domain.NetworkMainnet, domain.BranchReceive, 5)
 	if err != nil {
 		t.Fatalf("AddressAt: %v", err)
 	}
-	sm, err := s.SignMessage(ctx, "vec", d.Address, []byte("gap window"), pass("pw"))
+	sm, err := s.SignMessage(ctx, "vec", d.Address, domain.NetworkMainnet, []byte("gap window"), pass("pw"))
 	if err != nil {
 		t.Fatalf("SignMessage gap-window: %v", err)
 	}

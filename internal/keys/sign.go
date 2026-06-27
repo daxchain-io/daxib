@@ -48,7 +48,7 @@ type InputSigningSpec struct {
 // A wrong passphrase is keystore.bad_passphrase (exit 4); an unknown wallet is
 // wallet.not_found (exit 10). A spec.Index out of range or a derivation failure
 // is state.corrupt.
-func (s *Store) SignInputs(ctx context.Context, walletName string, pass *secret.Bytes, tx *wire.MsgTx, specs []InputSigningSpec) error {
+func (s *Store) SignInputs(ctx context.Context, walletName string, net domain.Network, pass *secret.Bytes, tx *wire.MsgTx, specs []InputSigningSpec) error {
 	if tx == nil {
 		return errKeys(CodeStateCorrupt, "nil transaction in SignInputs")
 	}
@@ -60,11 +60,11 @@ func (s *Store) SignInputs(ctx context.Context, walletName string, pass *secret.
 	if err != nil {
 		return err
 	}
-	wid, w, ok := meta.findWalletByName(walletName)
-	if !ok {
-		return errKeysf(CodeWalletNotFound, "no wallet named %q", walletName)
+	wid, _, _, cerr := meta.walletChain(walletName, net)
+	if cerr != nil {
+		return cerr
 	}
-	network := domain.Network(w.Network)
+	network := net
 
 	wb, err := s.loadWalletBlob(wid)
 	if err != nil {

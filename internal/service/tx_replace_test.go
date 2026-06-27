@@ -218,7 +218,7 @@ func TestCancelRedirectsToSelf_EngineProof(t *testing.T) {
 		}
 	}
 	// Every output must be wallet-owned (a change-branch address).
-	_, scan, _ := f.svc.keys.ScanAddresses(context.Background(), "vec", gapWindow)
+	_, scan, _ := f.svc.keys.ScanAddresses(context.Background(), "vec", domain.NetworkMainnet, gapWindow)
 	walletScripts := map[string]bool{}
 	for _, a := range scan {
 		walletScripts[string(scriptOf(t, a.Address))] = true

@@ -75,13 +75,16 @@ func (s *Service) writeAnchor(ctx context.Context, anchor policyseal.Anchor) err
 // prompt-compromised agent from importing an attacker key to mint itself an
 // allowlisted destination. Best-effort: an unreadable keystore yields an empty set.
 func (s *Service) selfSnapshot(ctx context.Context) []string {
-	wallets, err := s.keys.ListWallets(ctx)
+	wallets, err := s.keys.ListWallets(ctx, s.net)
 	if err != nil {
 		return nil
 	}
 	var out []string
 	for _, w := range wallets {
-		_, addrs, aerr := s.keys.ListAddresses(ctx, w.Name)
+		// A BOUND wallet whose locked network != the active network has no chain at
+		// s.net (and ListAddresses returns wallet.not_found for it). Skip it
+		// gracefully — the sealed self-allowlist enumerates the ACTIVE family only.
+		_, addrs, aerr := s.keys.ListAddresses(ctx, w.Name, s.net)
 		if aerr != nil {
 			continue
 		}

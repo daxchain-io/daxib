@@ -102,7 +102,7 @@ the family's dependency set.
 | ENS (`ens_resolve/reverse`) | No canonical Bitcoin name system. Optional resolver for **BIP‑353** + Lightning addresses (§3.12). |
 | EIP‑712 typed‑data signing | No analog. Message signing survives via **BIP‑322** (§3.7). |
 | Account‑balance model | Replaced by the **UTXO model** (§3.1). |
-| `chain‑id` network soup | Bitcoin has 4 well‑known networks (mainnet/testnet/signet/regtest) — simpler `network` noun. |
+| `chain‑id` network soup | Bitcoin has 5 well‑known networks (mainnet/testnet/testnet4/signet/regtest) — simpler `network` noun. |
 
 ### 2.3 Net‑new — uniquely Bitcoin (the "special tidbits")
 
@@ -117,7 +117,8 @@ daxie. Each gets a deep dive in §3.
    still build, analyze, track, and receive. Closes daxie's R1 structurally.
 4. **Output descriptors (BIP‑380–386)** — the modern wallet definition; a wallet *is*
    a descriptor. New `descriptor` noun.
-5. **Address types + native SegWit/Taproot** — BIP‑44/49/84/86; default Taproot.
+5. **Address types + native SegWit/Taproot** — BIP‑44/49/84/86. Shipped (v1):
+   BIP‑84 P2WPKH (native SegWit v0) only; Taproot/BIP‑86 is roadmap.
 6. **Miniscript + Taproot script‑path policy** — *consensus‑enforced* guardrails:
    co‑signing, timelocks, vaults. The headline security story.
 7. **sat/vByte fee market + RBF/CPFP/package relay** — mempool‑aware fee policy.
@@ -209,9 +210,24 @@ derivation and is what every modern backend (Bitcoin Core ≥0.21, electrs) spea
 
 ### 3.5 Address types & derivation
 
-Support P2WPKH (BIP‑84, bech32) and **P2TR (BIP‑86, bech32m, default)**, with
-P2PKH/P2SH‑P2WPKH for compatibility. Taproot is the default for new wallets: smaller
-fees, better privacy, and it's the gateway to Miniscript script‑path policies (§3.6).
+> **Shipped (v1):** the built wallet derives **P2WPKH only (BIP‑84, bech32)** —
+> path `m/84'/<coin_type>'/0'/<branch>/<index>`. The Taproot/legacy address types
+> below are the planned roadmap (§3.6 / roadmap), not the current surface.
+>
+> **Network scope (shipped).** A wallet is **network‑agnostic by default**: it
+> stores both BIP‑44 coin_type account xpubs (ct0 = mainnet, ct1 = every test net)
+> and derives addresses for whatever `--network` is active, off a single
+> per‑coin_type watermark. `wallet create --bind` opts into a **bound** wallet
+> locked to one network (storing only that coin_type); a bound wallet refuses ops
+> on any other active network (`usage.network_mismatch`). `wallet upgrade` promotes
+> a bound (or migrated‑legacy) wallet to agnostic by deriving the missing
+> coin_type. The keystore `meta.json` is format **v2** (`scope` + per‑coin_type
+> `chains`); older v1 metadata migrates losslessly on read to a **bound** wallet.
+
+The longer‑term target: support P2WPKH (BIP‑84, bech32) and **P2TR (BIP‑86,
+bech32m, default)**, with P2PKH/P2SH‑P2WPKH for compatibility. Taproot is the
+intended default for new wallets: smaller fees, better privacy, and it's the
+gateway to Miniscript script‑path policies (§3.6).
 
 ### 3.6 Miniscript / Taproot — guardrails the *network* enforces
 
@@ -335,7 +351,7 @@ Mirrors daxie's shape; diffs called out. Every command ships a human form **and*
 | `receive` | (block until inbound confirms; `--new`; optional silent‑payment / BIP‑21 invoice) | + SP option |
 | `resolve` | (BIP‑353 / Lightning address → target, pinned) | replaces `ens` |
 | `contacts` | `add` · `list` · `show` · `remove` | same |
-| `network` | `use` · `show` (mainnet/testnet/signet/regtest) | simpler than chain‑id |
+| `network` | `use` · `show` (mainnet/testnet/testnet4/signet/regtest) | simpler than chain‑id |
 | `backend` | `add` · `list` · `use` · `test` (bitcoind RPC / Electrum / Esplora) | replaces eth `rpc` |
 | `policy` | `show` · `set` · `allow` · `deny` · `verify` · `check` · `counters` · `pin` · `reset` · admin‑passphrase ops · **`fee-cap`** · **`coin-control`** · **`protect-assets`** | extended with BTC dims (`require-cosign` is forward-path, §5a) |
 | `mcp` | `serve` · `tools` | same |
