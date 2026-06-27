@@ -3,6 +3,7 @@ package fsx
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -18,6 +19,13 @@ func TestWriteAtomicCreatesAt0600(t *testing.T) {
 	}
 	if string(b) != "hello" {
 		t.Errorf("content = %q, want hello", b)
+	}
+	// POSIX permission bits don't exist on Windows: Go synthesizes the FileMode
+	// from the read-only attribute (a writable file reports 0666, not 0600), so the
+	// 0600 assertion is meaningful only on POSIX. fsx enforces owner-only access on
+	// Windows via a DACL in perms_windows.go, not the mode argument.
+	if runtime.GOOS == "windows" {
+		return
 	}
 	fi, err := os.Stat(path)
 	if err != nil {
