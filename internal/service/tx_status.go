@@ -26,7 +26,7 @@ var waitPollInterval = 5 * time.Second
 // updated, and promoted to confirmed when the chain confirms it); a foreign txid
 // that is on-chain returns its backend status without a journal row; an unknown
 // txid is ref.not_found (exit 10).
-func (s *Service) TxStatus(ctx context.Context, req domain.TxStatusRequest) (domain.TxResult, error) {
+func (s *Service) TxStatus(ctx context.Context, p domain.Principal, req domain.TxStatusRequest) (domain.TxResult, error) {
 	client, _, _, err := s.dialActiveBackend(ctx)
 	if err != nil {
 		return domain.TxResult{}, err
@@ -68,7 +68,7 @@ func (s *Service) TxStatus(ctx context.Context, req domain.TxStatusRequest) (dom
 
 // ListTxs returns the journal's records for the active network (newest-first),
 // optionally filtered by wallet.
-func (s *Service) ListTxs(ctx context.Context, req domain.TxListRequest) (domain.TxListResult, error) {
+func (s *Service) ListTxs(ctx context.Context, p domain.Principal, req domain.TxListRequest) (domain.TxListResult, error) {
 	// `tx list` is per-network (the journal is network-keyed). Guard like every other
 	// tx subcommand so an unqualified list fails with usage.network_required instead of
 	// vacuously succeeding against the empty-network journal — `tx list` was the lone
@@ -105,7 +105,7 @@ func (s *Service) ListTxs(ctx context.Context, req domain.TxListRequest) (domain
 // WaitTx is the standalone `tx wait <txid>` use case: it folds the journal,
 // rebroadcasts a still-`signed` record (the lost-broadcast window), then polls the
 // backend until the confirmation target is met or the deadline hits.
-func (s *Service) WaitTx(ctx context.Context, req domain.WaitRequest, sink domain.EventSink) (domain.TxResult, error) {
+func (s *Service) WaitTx(ctx context.Context, p domain.Principal, req domain.WaitRequest, sink domain.EventSink) (domain.TxResult, error) {
 	client, _, _, err := s.dialActiveBackend(ctx)
 	if err != nil {
 		return domain.TxResult{}, err

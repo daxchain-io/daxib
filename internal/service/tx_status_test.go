@@ -18,7 +18,7 @@ func sendOnce(t *testing.T, svc *Service, fake *fakebackend.Client) domain.TxRes
 	t.Helper()
 	var captured []byte
 	captureBroadcast(fake, &captured)
-	res, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	if err != nil {
 		t.Fatalf("SendTx: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestTxWaitConfirms(t *testing.T) {
 	}
 
 	conf := int64(1)
-	wres, err := svc.WaitTx(context.Background(), domain.WaitRequest{
+	wres, err := svc.WaitTx(context.Background(), domain.LocalCLI(), domain.WaitRequest{
 		Txid: res.Txid, Confirmations: &conf, Timeout: domain.Duration{D: 10 * time.Second},
 	}, nil)
 	if err != nil {
@@ -77,7 +77,7 @@ func TestTxWaitTimeout(t *testing.T) {
 	}
 
 	conf := int64(1)
-	_, err := svc.WaitTx(context.Background(), domain.WaitRequest{
+	_, err := svc.WaitTx(context.Background(), domain.LocalCLI(), domain.WaitRequest{
 		Txid: res.Txid, Confirmations: &conf, Timeout: domain.Duration{D: 10 * time.Millisecond},
 	}, nil)
 	de := domain.AsError(err)
@@ -106,7 +106,7 @@ func TestTxWaitRebroadcastsSignedRecord(t *testing.T) {
 		firstRaw = append([]byte(nil), raw...)
 		return "", domain.New(domain.CodeBackendUnreachable, "connection refused")
 	}
-	res, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	broadcastBackoff = orig
 	if err == nil {
 		t.Fatalf("expected transport error to leave a signed record")
@@ -130,7 +130,7 @@ func TestTxWaitRebroadcastsSignedRecord(t *testing.T) {
 		return domain.TxStatus{Txid: txid}, nil
 	}
 	conf := int64(1)
-	wres, werr := svc.WaitTx(context.Background(), domain.WaitRequest{
+	wres, werr := svc.WaitTx(context.Background(), domain.LocalCLI(), domain.WaitRequest{
 		Txid: res.Txid, Confirmations: &conf, Timeout: domain.Duration{D: 10 * time.Second},
 	}, nil)
 	if werr != nil {
@@ -157,7 +157,7 @@ func TestTxStatusForeignTxid(t *testing.T) {
 		}
 		return domain.TxStatus{Txid: txid}, nil // unknown → 0/0/false
 	}
-	res, err := svc.TxStatus(context.Background(), domain.TxStatusRequest{Txid: "feedface"})
+	res, err := svc.TxStatus(context.Background(), domain.LocalCLI(), domain.TxStatusRequest{Txid: "feedface"})
 	if err != nil {
 		t.Fatalf("TxStatus foreign: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestTxStatusForeignTxid(t *testing.T) {
 	}
 
 	// An unknown txid (not journaled, not on-chain) → ref.not_found (exit 10).
-	_, err = svc.TxStatus(context.Background(), domain.TxStatusRequest{Txid: "00deadbeef"})
+	_, err = svc.TxStatus(context.Background(), domain.LocalCLI(), domain.TxStatusRequest{Txid: "00deadbeef"})
 	de := domain.AsError(err)
 	if de == nil || de.Code != domain.CodeRefNotFound || de.Exit != domain.ExitNotFound {
 		t.Fatalf("unknown txid err=%v, want ref.not_found (exit 10)", err)
@@ -187,11 +187,11 @@ func TestTxListNewestFirst(t *testing.T) {
 
 	var captured []byte
 	captureBroadcast(fake, &captured)
-	r1, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.001"), nil)
+	r1, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.001"), nil)
 	if err != nil {
 		t.Fatalf("send1: %v", err)
 	}
-	r2, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.002"), nil)
+	r2, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.002"), nil)
 	if err != nil {
 		t.Fatalf("send2: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestTxListNewestFirst(t *testing.T) {
 	if r1.Inputs[0].Outpoint == r2.Inputs[0].Outpoint {
 		t.Fatalf("send2 re-selected send1's outpoint %s — reserved-outpoint exclusion failed", r1.Inputs[0].Outpoint)
 	}
-	list, err := svc.ListTxs(context.Background(), domain.TxListRequest{})
+	list, err := svc.ListTxs(context.Background(), domain.LocalCLI(), domain.TxListRequest{})
 	if err != nil {
 		t.Fatalf("ListTxs: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestReconcileAtOpenLeavesSignedForLazyRebroadcast(t *testing.T) {
 		atomic.AddInt32(&broadcasts, 1)
 		return "", domain.New(domain.CodeBackendUnreachable, "connection refused")
 	}
-	res, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	broadcastBackoff = orig
 	if err == nil {
 		t.Fatalf("expected transport error")

@@ -10,6 +10,16 @@ import (
 // tx_result.go holds the journal-record + TxResult builders shared by the send
 // and wait/status paths, plus the tiny progress-emit and hex helpers.
 
+// sourceOf attributes the journal Source (cli|mcp) from the Principal. It is the
+// single place the Principal seam (issue #11) turns into a journal Source string,
+// so an MCP-initiated fund move records Source:"mcp" and a CLI one records "cli".
+func sourceOf(p domain.Principal) string {
+	if p.Label == "mcp" {
+		return "mcp"
+	}
+	return "cli"
+}
+
 // emit sends a progress event to the sink, guarding nil (a non-streaming command
 // passes nil).
 func emit(sink domain.EventSink, stage, msg string) {
@@ -48,7 +58,7 @@ func itoa64(n int64) string {
 // journalRecord builds the `signed` journal record for an artifact (written
 // BEFORE broadcast). It records the consumed outpoints (the double-spend-avoidance
 // record), the outputs, and the recipient/change attribution.
-func (s *Service) journalRecord(wallet string, art sendArtifact, feeRate int64) *journal.Record {
+func (s *Service) journalRecord(p domain.Principal, wallet string, art sendArtifact, feeRate int64) *journal.Record {
 	inputs := make([]journal.JInput, 0, len(art.inputs))
 	for _, c := range art.inputs {
 		u := art.inAddr[c.Outpoint]
@@ -68,7 +78,7 @@ func (s *Service) journalRecord(wallet string, art sendArtifact, feeRate int64) 
 		Network:       string(s.net),
 		Wallet:        wallet,
 		Status:        journal.StatusSigned,
-		Source:        "cli",
+		Source:        sourceOf(p),
 		Txid:          art.txid, // also computable from RawTx; set early for ByTxid lookups
 		RawTx:         hexRaw(art.rawTx),
 		FeeRate:       feeRate,

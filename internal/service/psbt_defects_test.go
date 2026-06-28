@@ -154,13 +154,13 @@ func TestPSBTSign_AllowlistBypassNonStandardOutputDenied(t *testing.T) {
 
 	// Generous caps, allowlist ON, only the legit recipient pinned.
 	on := true
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: &on,
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
 	}
 	const legit = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
-	if _, err := svc.PolicyAllow(context.Background(), PolicyPinInput{Address: legit}); err != nil {
+	if _, err := svc.PolicyAllow(context.Background(), domain.LocalCLI(), PolicyPinInput{Address: legit}); err != nil {
 		t.Fatalf("PolicyAllow: %v", err)
 	}
 
@@ -175,7 +175,7 @@ func TestPSBTSign_AllowlistBypassNonStandardOutputDenied(t *testing.T) {
 			{script: nonStandardScript(t), value: 980_000},
 		})
 
-	res, err := svc.PSBTSign(context.Background(),
+	res, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: b64, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err == nil {
 		t.Fatal("BYPASS: a non-standard non-allowlisted sink rode along ungated — sign must be DENIED")
@@ -200,13 +200,13 @@ func TestPSBTSign_AllowlistAllowsLegitOnly(t *testing.T) {
 	programOwnedUTXO(fake, 1_000_000)
 
 	on := true
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: &on,
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
 	}
 	const legit = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
-	if _, err := svc.PolicyAllow(context.Background(), PolicyPinInput{Address: legit}); err != nil {
+	if _, err := svc.PolicyAllow(context.Background(), domain.LocalCLI(), PolicyPinInput{Address: legit}); err != nil {
 		t.Fatalf("PolicyAllow: %v", err)
 	}
 	legitAddr, _ := btcutil.DecodeAddress(legit, &chaincfg.MainNetParams)
@@ -216,7 +216,7 @@ func TestPSBTSign_AllowlistAllowsLegitOnly(t *testing.T) {
 		[]psbtInput{{script: ownedScript(t), value: 1_000_000}},
 		[]psbtOutput{{script: legitScript, value: 500_000}})
 
-	res, err := svc.PSBTSign(context.Background(),
+	res, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: b64, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err != nil {
 		t.Fatalf("an allowlisted-only sign must succeed: %v", err)
@@ -237,7 +237,7 @@ func TestPSBTSign_NonStandardSinkUnderNoAllowlistPermitted(t *testing.T) {
 	defer teardown()
 	programOwnedUTXO(fake, 1_000_000)
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -247,7 +247,7 @@ func TestPSBTSign_NonStandardSinkUnderNoAllowlistPermitted(t *testing.T) {
 		[]psbtInput{{script: ownedScript(t), value: 1_000_000}},
 		[]psbtOutput{{script: nonStandardScript(t), value: 900_000}})
 
-	res, err := svc.PSBTSign(context.Background(),
+	res, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: b64, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err != nil {
 		t.Fatalf("a non-standard sink under no allowlist must be permitted: %v", err)
@@ -268,7 +268,7 @@ func TestPSBTSign_ForeignInputDoesNotPanic(t *testing.T) {
 	defer teardown()
 	programOwnedUTXO(fake, 1_000_000)
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -282,7 +282,7 @@ func TestPSBTSign_ForeignInputDoesNotPanic(t *testing.T) {
 		},
 		[]psbtOutput{{script: dest, value: 500_000}})
 
-	res, err := svc.PSBTSign(context.Background(),
+	res, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: b64, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err != nil {
 		t.Fatalf("a partially-owned PSBT must sign the owned input without panicking: %v", err)
@@ -311,7 +311,7 @@ func TestPSBTSign_MultisigChargesOnlyWalletOutflow(t *testing.T) {
 	// cap = 2_000_000: ABOVE the wallet's net outflow (1_000_000) but BELOW the full
 	// external output (5_500_000). The old code charged externalOutSat=5_500_000 and
 	// falsely denied; the fix charges only the wallet's netOut.
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "2000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -325,7 +325,7 @@ func TestPSBTSign_MultisigChargesOnlyWalletOutflow(t *testing.T) {
 		},
 		[]psbtOutput{{script: dest, value: 5_500_000}})
 
-	res, err := svc.PSBTSign(context.Background(),
+	res, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: b64, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err != nil {
 		t.Fatalf("a multisig sign the wallet only partly funds must charge ONLY its net outflow, not the co-signer's value: %v", err)
@@ -336,7 +336,7 @@ func TestPSBTSign_MultisigChargesOnlyWalletOutflow(t *testing.T) {
 
 	// The reservation must reflect the wallet's net outflow (1_000_000), NOT the full
 	// 5_500_000 external output.
-	cr, _ := svc.PolicyCounters(context.Background())
+	cr, _ := svc.PolicyCounters(context.Background(), domain.LocalCLI())
 	if len(cr.Counters) == 0 || cr.Counters[0].Used24hSat != "1000000" {
 		t.Fatalf("multisig sign must charge the wallet's net outflow (1000000), got %+v", cr.Counters)
 	}
@@ -358,7 +358,7 @@ func TestPSBTSign_UnderstatedOwnedValueReverifiedAgainstBackend(t *testing.T) {
 
 	// per-tx cap 600_000: a 900_000-sat external spend (true net outflow 1_000_000)
 	// must be DENIED.
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "600000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -372,7 +372,7 @@ func TestPSBTSign_UnderstatedOwnedValueReverifiedAgainstBackend(t *testing.T) {
 		[]psbtInput{{script: ownedScript(t), value: 650_000}},
 		[]psbtOutput{{script: dest, value: 900_000}})
 
-	_, err := svc.PSBTSign(context.Background(),
+	_, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: b64, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err == nil {
 		t.Fatal("an understated-value PSBT must be re-verified against the backend and DENIED over the cap")

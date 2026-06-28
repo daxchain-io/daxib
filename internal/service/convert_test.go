@@ -35,7 +35,7 @@ func TestConvertSatBTC(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := svc.Convert(ctx, domain.ConvertRequest{Amount: tc.amount, To: tc.to})
+			res, err := svc.Convert(ctx, domain.LocalCLI(), domain.ConvertRequest{Amount: tc.amount, To: tc.to})
 			if err != nil {
 				t.Fatalf("Convert(%q,%q): %v", tc.amount, tc.to, err)
 			}
@@ -55,14 +55,14 @@ func TestConvertSatBTC(t *testing.T) {
 	}
 
 	// A bad target unit is a usage error (exit 2).
-	if _, err := svc.Convert(ctx, domain.ConvertRequest{Amount: "1btc", To: "gwei"}); err == nil {
+	if _, err := svc.Convert(ctx, domain.LocalCLI(), domain.ConvertRequest{Amount: "1btc", To: "gwei"}); err == nil {
 		t.Fatal("Convert bad unit: want error, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitUsage {
 		t.Errorf("bad-unit exit=%d; want %d (usage)", de.Exit, domain.ExitUsage)
 	}
 
 	// A malformed amount surfaces the parser's usage.bad_amount (exit 2).
-	if _, err := svc.Convert(ctx, domain.ConvertRequest{Amount: "not-a-number"}); err == nil {
+	if _, err := svc.Convert(ctx, domain.LocalCLI(), domain.ConvertRequest{Amount: "not-a-number"}); err == nil {
 		t.Fatal("Convert bad amount: want error, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitUsage {
 		t.Errorf("bad-amount exit=%d; want %d (usage)", de.Exit, domain.ExitUsage)

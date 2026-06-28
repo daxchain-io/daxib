@@ -28,7 +28,7 @@ import (
 // send-lock so it cannot race an in-flight send's reconcile/selection. It returns
 // ref.not_found for an unknown txid and tx.already_broadcast (exit 9) for a record
 // that already reached broadcast.
-func (s *Service) AbandonTx(ctx context.Context, req domain.AbandonRequest) (domain.AbandonResult, error) {
+func (s *Service) AbandonTx(ctx context.Context, p domain.Principal, req domain.AbandonRequest) (domain.AbandonResult, error) {
 	if err := s.requireNetwork(); err != nil {
 		return domain.AbandonResult{}, err
 	}

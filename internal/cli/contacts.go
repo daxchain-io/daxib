@@ -51,7 +51,7 @@ func newContactsAddCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.ContactAdd(cmd.Context(), domain.ContactAddRequest{
+			res, err := svc.ContactAdd(cmd.Context(), domain.LocalCLI(), domain.ContactAddRequest{
 				Name: args[0], Address: args[1], Label: label,
 			})
 			if err != nil {
@@ -78,7 +78,7 @@ func newContactsListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.ContactList(cmd.Context(), domain.ContactListRequest{})
+			res, err := svc.ContactList(cmd.Context(), domain.LocalCLI(), domain.ContactListRequest{})
 			if err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func newContactsShowCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.ContactShow(cmd.Context(), domain.ContactShowRequest{Name: args[0]})
+			res, err := svc.ContactShow(cmd.Context(), domain.LocalCLI(), domain.ContactShowRequest{Name: args[0]})
 			if err != nil {
 				return err
 			}
@@ -139,7 +139,7 @@ func newContactsRemoveCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.ContactRemove(cmd.Context(), domain.ContactRemoveRequest{Name: args[0]})
+			res, err := svc.ContactRemove(cmd.Context(), domain.LocalCLI(), domain.ContactRemoveRequest{Name: args[0]})
 			if err != nil {
 				return err
 			}

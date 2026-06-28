@@ -49,21 +49,21 @@ const (
 
 // SpeedupTx builds + broadcasts a higher-fee replacement of an unconfirmed send
 // (BIP-125), paying the SAME recipient.
-func (s *Service) SpeedupTx(ctx context.Context, req domain.SpeedupRequest, sink domain.EventSink) (domain.TxResult, error) {
-	return s.replaceTx(ctx, req.Wallet, req.Txid, modeSpeedup, req.FeeRate, req.Yes, req.Wait, sink)
+func (s *Service) SpeedupTx(ctx context.Context, p domain.Principal, req domain.SpeedupRequest, sink domain.EventSink) (domain.TxResult, error) {
+	return s.replaceTx(ctx, p, req.Wallet, req.Txid, modeSpeedup, req.FeeRate, req.Yes, req.Wait, sink)
 }
 
 // CancelTx builds + broadcasts a replacement that redirects all funds to a
 // wallet-owned change address (voiding the original payment) at a higher fee.
-func (s *Service) CancelTx(ctx context.Context, req domain.CancelRequest, sink domain.EventSink) (domain.TxResult, error) {
-	return s.replaceTx(ctx, req.Wallet, req.Txid, modeCancel, req.FeeRate, req.Yes, req.Wait, sink)
+func (s *Service) CancelTx(ctx context.Context, p domain.Principal, req domain.CancelRequest, sink domain.EventSink) (domain.TxResult, error) {
+	return s.replaceTx(ctx, p, req.Wallet, req.Txid, modeCancel, req.FeeRate, req.Yes, req.Wait, sink)
 }
 
 // replaceTx is the shared RBF lifecycle under the per-wallet send-lock. It mirrors
 // SendTx's settle/abort guard so a post-acceptance SetState failure leaves the
 // replacement `signed` (recoverable), never `failed`, and never strands the live
 // replacement.
-func (s *Service) replaceTx(ctx context.Context, wallet, txid string, mode replaceMode, feeRateStr string, yes bool, wait domain.WaitOpts, sink domain.EventSink) (domain.TxResult, error) {
+func (s *Service) replaceTx(ctx context.Context, p domain.Principal, wallet, txid string, mode replaceMode, feeRateStr string, yes bool, wait domain.WaitOpts, sink domain.EventSink) (domain.TxResult, error) {
 	// No silent default: an RBF replacement is network-specific (journal keyed by
 	// network, address decode per network). Fail before the confirmation gate.
 	if err := s.requireNetwork(); err != nil {
@@ -204,7 +204,7 @@ func (s *Service) replaceTx(ctx context.Context, wallet, txid string, mode repla
 	}
 
 	// 6. Journal the replacement as `signed` BEFORE broadcast, LINKED to the original.
-	rec := s.journalRecord(wallet, art, newRate)
+	rec := s.journalRecord(p, wallet, art, newRate)
 	rec.ReservationID = resv.ID()
 	rec.ReplacesID = orig.ID
 	if err := s.journal.Append(ctx, rec); err != nil {

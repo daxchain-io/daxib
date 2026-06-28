@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/daxchain-io/daxib/internal/cli/render"
+	"github.com/daxchain-io/daxib/internal/domain"
 	"github.com/spf13/cobra"
 )
 
@@ -66,7 +67,7 @@ func newNetworkUseCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			if net == "none" || net == "clear" {
 				net = ""
 			}
-			res, err := svc.NetworkUse(cmd.Context(), net)
+			res, err := svc.NetworkUse(cmd.Context(), domain.LocalCLI(), net)
 			if err != nil {
 				return err
 			}
@@ -93,7 +94,7 @@ func newNetworkShowCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.NetworkShow(cmd.Context())
+			res, err := svc.NetworkShow(cmd.Context(), domain.LocalCLI())
 			if err != nil {
 				return err
 			}
@@ -127,7 +128,7 @@ func newNetworkListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.NetworkList(cmd.Context())
+			res, err := svc.NetworkList(cmd.Context(), domain.LocalCLI())
 			if err != nil {
 				return err
 			}

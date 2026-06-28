@@ -45,7 +45,7 @@ type KeystoreChangePassphraseInput struct {
 // passphrase, atomically (§3.8): a crash leaves either the all-old or the all-new
 // keystore, never a mix. keys.Open already healed any prior crashed rotation
 // (forward/back) before this runs.
-func (s *Service) KeystoreChangePassphrase(ctx context.Context, req domain.KeystoreChangePassphraseRequest, in KeystoreChangePassphraseInput) (domain.KeystoreChangePassphraseResult, error) {
+func (s *Service) KeystoreChangePassphrase(ctx context.Context, p domain.Principal, req domain.KeystoreChangePassphraseRequest, in KeystoreChangePassphraseInput) (domain.KeystoreChangePassphraseResult, error) {
 	_ = req // Yes is the cli confirmation gate; no payload here.
 
 	oldPass, _, err := s.acquire(passphraseSpec(in.OldStdin, in.OldFile, false))
@@ -129,7 +129,7 @@ func (s *Service) acquireRotationConfirm(in KeystoreChangePassphraseInput, stdin
 
 // KeystoreInfo reports the keystore path, manifest format, KDF template, and wallet
 // count. Read-only; no unlock and no secret.
-func (s *Service) KeystoreInfo(ctx context.Context, _ domain.KeystoreInfoRequest) (domain.KeystoreInfoResult, error) {
+func (s *Service) KeystoreInfo(ctx context.Context, p domain.Principal, _ domain.KeystoreInfoRequest) (domain.KeystoreInfoResult, error) {
 	info, err := s.keys.KeystoreInfo(ctx)
 	if err != nil {
 		return domain.KeystoreInfoResult{}, err

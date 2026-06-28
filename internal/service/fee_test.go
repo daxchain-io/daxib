@@ -18,7 +18,7 @@ func TestFeeFloorApplied(t *testing.T) {
 	svc, teardown := newSendService(t, fake)
 	defer teardown()
 
-	res, err := svc.Fee(context.Background(), domain.FeeRequest{Speed: "normal"})
+	res, err := svc.Fee(context.Background(), domain.LocalCLI(), domain.FeeRequest{Speed: "normal"})
 	if err != nil {
 		t.Fatalf("Fee: %v", err)
 	}

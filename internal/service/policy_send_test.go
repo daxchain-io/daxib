@@ -54,12 +54,12 @@ func newPolicySendService(t *testing.T, fake *fakebackend.Client) (*Service, fun
 	if err != nil {
 		t.Fatalf("service.Open: %v", err)
 	}
-	if _, _, err := svc.BackendAdd(context.Background(), domain.BackendAddRequest{
+	if _, _, err := svc.BackendAdd(context.Background(), domain.LocalCLI(), domain.BackendAddRequest{
 		Name: "fake-x", Network: "mainnet", Type: domain.BackendEsplora, URL: "http://fake",
 	}); err != nil {
 		t.Fatalf("BackendAdd: %v", err)
 	}
-	if _, err := svc.BackendUse(context.Background(), domain.BackendUseRequest{Name: "fake-x"}); err != nil {
+	if _, err := svc.BackendUse(context.Background(), domain.LocalCLI(), domain.BackendUseRequest{Name: "fake-x"}); err != nil {
 		t.Fatalf("BackendUse: %v", err)
 	}
 	importCanonical(t, svc, "vec")
@@ -93,7 +93,7 @@ func TestSendDeniedOverLimitBeforeSigning(t *testing.T) {
 
 	// Bootstrap a policy with a per-tx cap WELL below the send (allowlist off so the
 	// only gate is the amount limit). max-tx = 100_000 sat.
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -103,7 +103,7 @@ func TestSendDeniedOverLimitBeforeSigning(t *testing.T) {
 
 	// Send 0.005 BTC (500_000 sat) — over the 100_000 cap ⇒ DENIED (exit 3) before
 	// any signature exists.
-	_, err := svc.SendTx(context.Background(), domain.SendRequest{
+	_, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
 		Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
@@ -138,14 +138,14 @@ func TestSendAllowedWithinLimit(t *testing.T) {
 	defer teardown()
 
 	// A generous cap (allowlist off): a normal send proceeds and broadcasts.
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
 	}
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
-	res, err := svc.SendTx(context.Background(), domain.SendRequest{
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
 		Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
@@ -157,7 +157,7 @@ func TestSendAllowedWithinLimit(t *testing.T) {
 	}
 
 	// The reservation was committed: the rolling-24h counter shows the spend.
-	cr, cerr := svc.PolicyCounters(context.Background())
+	cr, cerr := svc.PolicyCounters(context.Background(), domain.LocalCLI())
 	if cerr != nil {
 		t.Fatal(cerr)
 	}
@@ -177,7 +177,7 @@ func TestSendDayLimitDeniesSecondSendAndReleaseFrees(t *testing.T) {
 
 	// max-day = 700_000 sat (allowlist off). The first 0.005 BTC (500_000 + fee)
 	// commits; a second 0.005 BTC would exceed the rolling-24h window ⇒ denied.
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "700000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -187,7 +187,7 @@ func TestSendDayLimitDeniesSecondSendAndReleaseFrees(t *testing.T) {
 	programUTXO(fake, canonicalReceive0, "22"+strings.Repeat("0", 62), 0, 1_000_000)
 
 	// First send commits.
-	if _, err := svc.SendTx(context.Background(), domain.SendRequest{
+	if _, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
 		Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil); err != nil {
@@ -195,7 +195,7 @@ func TestSendDayLimitDeniesSecondSendAndReleaseFrees(t *testing.T) {
 	}
 
 	// Second send would push the rolling-24h total over 700_000 ⇒ denied (exit 3).
-	_, err := svc.SendTx(context.Background(), domain.SendRequest{
+	_, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
 		Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)

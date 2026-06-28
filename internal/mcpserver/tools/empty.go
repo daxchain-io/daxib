@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 
+	"github.com/daxchain-io/daxib/internal/domain"
 	"github.com/daxchain-io/daxib/internal/service"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -48,10 +49,10 @@ type PolicyCheckArgs struct {
 // addPolicyShow registers the read-only policy_show tool. PolicyShow takes (ctx)
 // with no request, so the handler ignores the Empty input and returns the SAME
 // service.PolicyShowResult the CLI `policy show --json` renders.
-func addPolicyShow(srv *mcp.Server, name, desc string, fn func(context.Context) (service.PolicyShowResult, error)) {
+func addPolicyShow(srv *mcp.Server, name, desc string, fn func(context.Context, domain.Principal) (service.PolicyShowResult, error)) {
 	mcp.AddTool(srv, withSchemas[Empty, service.PolicyShowResult](readToolDef(name, desc)),
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ Empty) (*mcp.CallToolResult, *service.PolicyShowResult, error) {
-			out, err := fn(ctx)
+			out, err := fn(ctx, domain.LocalMCP())
 			if err != nil {
 				return nil, nil, toolError(err)
 			}
@@ -64,10 +65,10 @@ func addPolicyShow(srv *mcp.Server, name, desc string, fn func(context.Context) 
 // SAME service.PolicyCheckResult the CLI builds. A denial is reported IN the result
 // (allowed:false + the dotted code), exactly as the service method returns it — a
 // dry-run reserves nothing, so there is no policy.denied error on this path.
-func addPolicyCheck(srv *mcp.Server, name, desc string, fn func(context.Context, service.PolicyCheckInput) (service.PolicyCheckResult, error)) {
+func addPolicyCheck(srv *mcp.Server, name, desc string, fn func(context.Context, domain.Principal, service.PolicyCheckInput) (service.PolicyCheckResult, error)) {
 	mcp.AddTool(srv, withSchemas[PolicyCheckArgs, service.PolicyCheckResult](readToolDef(name, desc)),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in PolicyCheckArgs) (*mcp.CallToolResult, *service.PolicyCheckResult, error) {
-			out, err := fn(ctx, service.PolicyCheckInput{
+			out, err := fn(ctx, domain.LocalMCP(), service.PolicyCheckInput{
 				To: in.To, Amount: in.Amount, FeeRate: in.FeeRate, FeeSat: in.FeeSat,
 			})
 			if err != nil {

@@ -29,7 +29,7 @@ func (s *Service) requireConfig() (*config.Store, error) {
 
 // BackendAdd stores a named backend endpoint bound to a network. Secret values are
 // stored RAW (as ${env:}/${file:} refs); a literal secret triggers a warning.
-func (s *Service) BackendAdd(ctx context.Context, req domain.BackendAddRequest) (domain.BackendAddResult, []string, error) {
+func (s *Service) BackendAdd(ctx context.Context, p domain.Principal, req domain.BackendAddRequest) (domain.BackendAddResult, []string, error) {
 	store, err := s.requireConfig()
 	if err != nil {
 		return domain.BackendAddResult{}, nil, err
@@ -64,7 +64,7 @@ func (s *Service) BackendAdd(ctx context.Context, req domain.BackendAddRequest) 
 
 // BackendList returns every configured backend (masked), optionally filtered to a
 // network.
-func (s *Service) BackendList(ctx context.Context, req domain.BackendListRequest) (domain.BackendListResult, error) {
+func (s *Service) BackendList(ctx context.Context, p domain.Principal, req domain.BackendListRequest) (domain.BackendListResult, error) {
 	store, err := s.requireConfig()
 	if err != nil {
 		return domain.BackendListResult{}, err
@@ -91,7 +91,7 @@ func (s *Service) BackendList(ctx context.Context, req domain.BackendListRequest
 }
 
 // BackendUse makes a backend the default for ITS network.
-func (s *Service) BackendUse(ctx context.Context, req domain.BackendUseRequest) (domain.BackendUseResult, error) {
+func (s *Service) BackendUse(ctx context.Context, p domain.Principal, req domain.BackendUseRequest) (domain.BackendUseResult, error) {
 	store, err := s.requireConfig()
 	if err != nil {
 		return domain.BackendUseResult{}, err
@@ -104,7 +104,7 @@ func (s *Service) BackendUse(ctx context.Context, req domain.BackendUseRequest) 
 }
 
 // BackendRemove removes a backend and clears any network default pointing at it.
-func (s *Service) BackendRemove(ctx context.Context, req domain.BackendRemoveRequest) (domain.BackendRemoveResult, error) {
+func (s *Service) BackendRemove(ctx context.Context, p domain.Principal, req domain.BackendRemoveRequest) (domain.BackendRemoveResult, error) {
 	store, err := s.requireConfig()
 	if err != nil {
 		return domain.BackendRemoveResult{}, err
@@ -120,7 +120,7 @@ func (s *Service) BackendRemove(ctx context.Context, req domain.BackendRemoveReq
 // TipHeight, reporting the observed height + the round-trip latency. It proves the
 // dial + auth + resolution path end-to-end. A dial failure surfaces as
 // backend.unreachable (exit 6).
-func (s *Service) BackendTest(ctx context.Context, req domain.BackendTestRequest) (domain.BackendTestResult, error) {
+func (s *Service) BackendTest(ctx context.Context, p domain.Principal, req domain.BackendTestRequest) (domain.BackendTestResult, error) {
 	name, ep, err := s.resolveBackend(req.Name)
 	if err != nil {
 		return domain.BackendTestResult{}, err

@@ -57,12 +57,12 @@ func newSendService(t *testing.T, fake *fakebackend.Client) (*Service, func()) {
 	}
 	// Register + select a (fake) backend so resolveBackend succeeds; the URL is
 	// irrelevant since Dial is injected.
-	if _, _, err := svc.BackendAdd(context.Background(), domain.BackendAddRequest{
+	if _, _, err := svc.BackendAdd(context.Background(), domain.LocalCLI(), domain.BackendAddRequest{
 		Name: "fake-x", Network: "mainnet", Type: domain.BackendEsplora, URL: "http://fake",
 	}); err != nil {
 		t.Fatalf("BackendAdd: %v", err)
 	}
-	if _, err := svc.BackendUse(context.Background(), domain.BackendUseRequest{Name: "fake-x"}); err != nil {
+	if _, err := svc.BackendUse(context.Background(), domain.LocalCLI(), domain.BackendUseRequest{Name: "fake-x"}); err != nil {
 		t.Fatalf("BackendUse: %v", err)
 	}
 	importCanonical(t, svc, "vec")
@@ -113,7 +113,7 @@ func TestSendTx_EngineVerifiesBroadcast(t *testing.T) {
 
 	// Send 0.005 BTC to a known external P2WPKH address at 10 sat/vB.
 	const recipient = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
-	res, err := svc.SendTx(context.Background(), domain.SendRequest{
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: recipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	if err != nil {

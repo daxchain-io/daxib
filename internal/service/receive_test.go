@@ -66,7 +66,7 @@ func TestReceiveDetectsInbound(t *testing.T) {
 	var kinds []domain.ReceiveEventKind
 	sink := func(ev domain.ReceiveEvent) { kinds = append(kinds, ev.Kind) }
 
-	res, err := svc.Receive(context.Background(), domain.ReceiveRequest{
+	res, err := svc.Receive(context.Background(), domain.LocalCLI(), domain.ReceiveRequest{
 		Wallet:       "vec",
 		Amount:       "150000sat",
 		PollInterval: domain.Duration{D: time.Millisecond},
@@ -116,7 +116,7 @@ func TestReceiveAnyInbound(t *testing.T) {
 		ValueSat: 5000, Height: 799999, Confirmations: 2,
 	}})
 
-	res, err := svc.Receive(context.Background(), domain.ReceiveRequest{
+	res, err := svc.Receive(context.Background(), domain.LocalCLI(), domain.ReceiveRequest{
 		Wallet: "vec", PollInterval: domain.Duration{D: time.Millisecond},
 	}, nil)
 	if err != nil {
@@ -136,7 +136,7 @@ func TestReceiveTimeout(t *testing.T) {
 	defer done()
 	// No UTXOs programmed: nothing ever arrives.
 
-	res, err := svc.Receive(context.Background(), domain.ReceiveRequest{
+	res, err := svc.Receive(context.Background(), domain.LocalCLI(), domain.ReceiveRequest{
 		Wallet:       "vec",
 		Amount:       "1000sat",
 		Timeout:      domain.Duration{D: 20 * time.Millisecond},
@@ -166,7 +166,7 @@ func TestReceiveUnconfirmedDoesNotComplete(t *testing.T) {
 		ValueSat: 9000, Height: 0, Confirmations: 0,
 	}})
 
-	res, err := svc.Receive(context.Background(), domain.ReceiveRequest{
+	res, err := svc.Receive(context.Background(), domain.LocalCLI(), domain.ReceiveRequest{
 		Wallet:       "vec",
 		Amount:       "9000sat",
 		Timeout:      domain.Duration{D: 20 * time.Millisecond},
@@ -200,7 +200,7 @@ func TestReceivePreFundedTimesOut(t *testing.T) {
 		ValueSat: 150000, Height: 799994, Confirmations: 7,
 	}}
 
-	res, err := svc.Receive(context.Background(), domain.ReceiveRequest{
+	res, err := svc.Receive(context.Background(), domain.LocalCLI(), domain.ReceiveRequest{
 		Wallet:       "vec",
 		Amount:       "150000sat",
 		Timeout:      domain.Duration{D: 20 * time.Millisecond},
@@ -237,7 +237,7 @@ func TestReceiveEventShapeStable(t *testing.T) {
 	var events []domain.ReceiveEvent
 	sink := func(ev domain.ReceiveEvent) { events = append(events, ev) }
 
-	if _, err := svc.Receive(context.Background(), domain.ReceiveRequest{
+	if _, err := svc.Receive(context.Background(), domain.LocalCLI(), domain.ReceiveRequest{
 		Wallet:       "vec",
 		Amount:       "150000sat",
 		PollInterval: domain.Duration{D: time.Millisecond},

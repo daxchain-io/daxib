@@ -23,25 +23,25 @@ func TestContactAddListShowRemove(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	if _, err := svc.ContactAdd(ctx, domain.ContactAddRequest{Name: "alice", Address: contactRecipient, Label: "friend"}); err != nil {
+	if _, err := svc.ContactAdd(ctx, domain.LocalCLI(), domain.ContactAddRequest{Name: "alice", Address: contactRecipient, Label: "friend"}); err != nil {
 		t.Fatalf("ContactAdd: %v", err)
 	}
 
 	// Duplicate name is a usage error.
-	if _, err := svc.ContactAdd(ctx, domain.ContactAddRequest{Name: "alice", Address: contactRecipient}); err == nil {
+	if _, err := svc.ContactAdd(ctx, domain.LocalCLI(), domain.ContactAddRequest{Name: "alice", Address: contactRecipient}); err == nil {
 		t.Fatal("ContactAdd duplicate: want error, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitUsage {
 		t.Errorf("duplicate exit=%d; want %d (usage)", de.Exit, domain.ExitUsage)
 	}
 
 	// A bad address for the active network is a usage error.
-	if _, err := svc.ContactAdd(ctx, domain.ContactAddRequest{Name: "bob", Address: "not-an-address"}); err == nil {
+	if _, err := svc.ContactAdd(ctx, domain.LocalCLI(), domain.ContactAddRequest{Name: "bob", Address: "not-an-address"}); err == nil {
 		t.Fatal("ContactAdd bad address: want error, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitUsage {
 		t.Errorf("bad-address exit=%d; want %d (usage)", de.Exit, domain.ExitUsage)
 	}
 
-	show, err := svc.ContactShow(ctx, domain.ContactShowRequest{Name: "ALICE"}) // case-insensitive
+	show, err := svc.ContactShow(ctx, domain.LocalCLI(), domain.ContactShowRequest{Name: "ALICE"}) // case-insensitive
 	if err != nil {
 		t.Fatalf("ContactShow: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestContactAddListShowRemove(t *testing.T) {
 		t.Errorf("show = %+v; want addr/network/label populated", show.Contact)
 	}
 
-	list, err := svc.ContactList(ctx, domain.ContactListRequest{})
+	list, err := svc.ContactList(ctx, domain.LocalCLI(), domain.ContactListRequest{})
 	if err != nil {
 		t.Fatalf("ContactList: %v", err)
 	}
@@ -57,11 +57,11 @@ func TestContactAddListShowRemove(t *testing.T) {
 		t.Fatalf("list = %+v; want [alice]", list.Contacts)
 	}
 
-	if _, err := svc.ContactRemove(ctx, domain.ContactRemoveRequest{Name: "alice"}); err != nil {
+	if _, err := svc.ContactRemove(ctx, domain.LocalCLI(), domain.ContactRemoveRequest{Name: "alice"}); err != nil {
 		t.Fatalf("ContactRemove: %v", err)
 	}
 	// Now show/remove of the gone name is ref.not_found (exit 10).
-	if _, err := svc.ContactShow(ctx, domain.ContactShowRequest{Name: "alice"}); err == nil {
+	if _, err := svc.ContactShow(ctx, domain.LocalCLI(), domain.ContactShowRequest{Name: "alice"}); err == nil {
 		t.Fatal("ContactShow after remove: want not_found, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitNotFound {
 		t.Errorf("not-found exit=%d; want %d", de.Exit, domain.ExitNotFound)
@@ -78,7 +78,7 @@ func TestContactAddressShapedNameRejected(t *testing.T) {
 	ctx := context.Background()
 
 	// The NAME is a valid mainnet P2WPKH address; the target is a different address.
-	if _, err := svc.ContactAdd(ctx, domain.ContactAddRequest{Name: contactRecipient, Address: canonicalReceive1}); err == nil {
+	if _, err := svc.ContactAdd(ctx, domain.LocalCLI(), domain.ContactAddRequest{Name: contactRecipient, Address: canonicalReceive1}); err == nil {
 		t.Fatal("ContactAdd accepted an address-shaped name (CONTACT-RESOLVE-SHADOW-1)")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitUsage {
 		t.Errorf("address-shaped-name exit=%d; want %d (usage)", de.Exit, domain.ExitUsage)
@@ -132,13 +132,13 @@ func TestContactResolvesInSend(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	if _, err := svc.ContactAdd(ctx, domain.ContactAddRequest{Name: "payee", Address: contactRecipient}); err != nil {
+	if _, err := svc.ContactAdd(ctx, domain.LocalCLI(), domain.ContactAddRequest{Name: "payee", Address: contactRecipient}); err != nil {
 		t.Fatalf("ContactAdd: %v", err)
 	}
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
 	// Send to the CONTACT NAME, not a raw address.
-	res, err := svc.SendTx(ctx, domain.SendRequest{
+	res, err := svc.SendTx(ctx, domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: "payee", Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	if err != nil {
@@ -165,7 +165,7 @@ func TestContactResolvesInSend(t *testing.T) {
 
 	// A raw address in --to still works unchanged (the fall-through path).
 	programUTXO(fake, canonicalReceive0, "22"+strings.Repeat("0", 62), 1, 1_000_000)
-	if _, err := svc.SendTx(ctx, domain.SendRequest{
+	if _, err := svc.SendTx(ctx, domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: contactRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil); err != nil {
 		t.Fatalf("SendTx --to <raw address> regressed: %v", err)
@@ -182,24 +182,24 @@ func TestContactResolvesInPolicyAllow(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	if _, err := svc.ContactAdd(ctx, domain.ContactAddRequest{Name: "trusted", Address: contactRecipient}); err != nil {
+	if _, err := svc.ContactAdd(ctx, domain.LocalCLI(), domain.ContactAddRequest{Name: "trusted", Address: contactRecipient}); err != nil {
 		t.Fatalf("ContactAdd: %v", err)
 	}
 
 	// Bootstrap a sealed policy (allowlist on) so `policy allow` has an anchor to pin
 	// against. PolicySet derives the seal from the admin passphrase env.
 	allowlistOn := true
-	if _, err := svc.PolicySet(ctx, PolicySetInput{AllowlistOn: &allowlistOn}); err != nil {
+	if _, err := svc.PolicySet(ctx, domain.LocalCLI(), PolicySetInput{AllowlistOn: &allowlistOn}); err != nil {
 		t.Fatalf("PolicySet bootstrap: %v", err)
 	}
 
 	// Allow the CONTACT NAME — it must resolve to the contact's address and pin that.
 	// The admin passphrase is resolved from the env channel newPolicySendService wired.
-	if _, err := svc.PolicyAllow(ctx, PolicyPinInput{Address: "trusted"}); err != nil {
+	if _, err := svc.PolicyAllow(ctx, domain.LocalCLI(), PolicyPinInput{Address: "trusted"}); err != nil {
 		t.Fatalf("PolicyAllow trusted: %v", err)
 	}
 
-	show, err := svc.PolicyShow(ctx)
+	show, err := svc.PolicyShow(ctx, domain.LocalCLI())
 	if err != nil {
 		t.Fatalf("PolicyShow: %v", err)
 	}

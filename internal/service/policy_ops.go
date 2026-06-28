@@ -15,7 +15,7 @@ import (
 // (stdin/file); env channels are resolved by the §3.6 resolver.
 
 // PolicyShow returns the active policy + seal status (unauthenticated, read-only).
-func (s *Service) PolicyShow(ctx context.Context) (PolicyShowResult, error) {
+func (s *Service) PolicyShow(ctx context.Context, p domain.Principal) (PolicyShowResult, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return PolicyShowResult{}, err
@@ -43,7 +43,7 @@ func (s *Service) PolicyShow(ctx context.Context) (PolicyShowResult, error) {
 
 // PolicyVerify reports whether policy.json verifies under the pinned anchor
 // (passphrase-free). A failure returns the typed seal/rollback error (exit 8).
-func (s *Service) PolicyVerify(ctx context.Context) (policy.SealStatus, error) {
+func (s *Service) PolicyVerify(ctx context.Context, p domain.Principal) (policy.SealStatus, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return policy.SealStatus{}, err
@@ -52,7 +52,7 @@ func (s *Service) PolicyVerify(ctx context.Context) (policy.SealStatus, error) {
 }
 
 // PolicyPinPrint returns the pinned anchor JSON for re-emit/diff (passphrase-free).
-func (s *Service) PolicyPinPrint(ctx context.Context) (AnchorView, string, error) {
+func (s *Service) PolicyPinPrint(ctx context.Context, p domain.Principal) (AnchorView, string, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return AnchorView{}, "", err
@@ -70,7 +70,7 @@ func (s *Service) PolicyPinPrint(ctx context.Context) (AnchorView, string, error
 
 // PolicyPinVerify is the `policy pin --verify <key>` canary: does policy.json verify
 // under the SUPPLIED candidate key? Passphrase-free; a non-verify is a seal_violation.
-func (s *Service) PolicyPinVerify(ctx context.Context, candidate string) error {
+func (s *Service) PolicyPinVerify(ctx context.Context, p domain.Principal, candidate string) error {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (s *Service) PolicyPinVerify(ctx context.Context, candidate string) error {
 // the fee rate (explicit or a flat estimate is NOT needed — the check uses the
 // supplied/zero fee), runs Evaluate, and writes NO reservation. A denied check is a
 // policy.denied.* error (exit 3) carried up by the caller.
-func (s *Service) PolicyCheck(ctx context.Context, in PolicyCheckInput) (PolicyCheckResult, error) {
+func (s *Service) PolicyCheck(ctx context.Context, p domain.Principal, in PolicyCheckInput) (PolicyCheckResult, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return PolicyCheckResult{}, err
@@ -108,7 +108,7 @@ func (s *Service) PolicyCheck(ctx context.Context, in PolicyCheckInput) (PolicyC
 }
 
 // PolicyCounters returns the rolling-24h usage per network (read-only).
-func (s *Service) PolicyCounters(ctx context.Context) (PolicyCountersResult, error) {
+func (s *Service) PolicyCounters(ctx context.Context, p domain.Principal) (PolicyCountersResult, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return PolicyCountersResult{}, err
@@ -124,7 +124,7 @@ func (s *Service) PolicyCounters(ctx context.Context) (PolicyCountersResult, err
 // set bootstraps the anchor (generate keypair+salt+watermark 0). On a writable
 // config it writes the anchor; on a read-only config it returns the anchor JSON for
 // out-of-band landing (--anchor-out). It refuses to replace an existing trust root.
-func (s *Service) PolicySet(ctx context.Context, in PolicySetInput) (PolicyMutationResult, error) {
+func (s *Service) PolicySet(ctx context.Context, p domain.Principal, in PolicySetInput) (PolicyMutationResult, error) {
 	// Normalize + validate the limit flags FIRST so a malformed/unit-suffixed limit
 	// can never reach the sealed body (where it would fail OPEN at eval).
 	in, nerr := in.normalizeLimits()
@@ -171,11 +171,11 @@ func (s *Service) PolicySet(ctx context.Context, in PolicySetInput) (PolicyMutat
 }
 
 // PolicyAllow / PolicyDeny add or remove an address pin under the admin passphrase.
-func (s *Service) PolicyAllow(ctx context.Context, in PolicyPinInput) (PolicyMutationResult, error) {
+func (s *Service) PolicyAllow(ctx context.Context, p domain.Principal, in PolicyPinInput) (PolicyMutationResult, error) {
 	return s.pinMutation(ctx, in, true)
 }
 
-func (s *Service) PolicyDeny(ctx context.Context, in PolicyPinInput) (PolicyMutationResult, error) {
+func (s *Service) PolicyDeny(ctx context.Context, p domain.Principal, in PolicyPinInput) (PolicyMutationResult, error) {
 	return s.pinMutation(ctx, in, false)
 }
 
@@ -229,7 +229,7 @@ func (s *Service) pinMutation(ctx context.Context, in PolicyPinInput, allow bool
 }
 
 // PolicyReset reseals a fresh default body under the existing key family (admin-gated).
-func (s *Service) PolicyReset(ctx context.Context, in PolicyAdminInput) (PolicyMutationResult, error) {
+func (s *Service) PolicyReset(ctx context.Context, p domain.Principal, in PolicyAdminInput) (PolicyMutationResult, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return PolicyMutationResult{}, err
@@ -260,7 +260,7 @@ func (s *Service) PolicyReset(ctx context.Context, in PolicyAdminInput) (PolicyM
 // before RESEAL is rolled BACK by recovery (policy.json still under OLD). A crash
 // after RESEAL is rolled FORWARD by recovery (policy.json under NEW ⇒ promote). The
 // limits are never wiped.
-func (s *Service) PolicyChangeAdminPassphrase(ctx context.Context, in PolicyRotateInput) (PolicyMutationResult, error) {
+func (s *Service) PolicyChangeAdminPassphrase(ctx context.Context, p domain.Principal, in PolicyRotateInput) (PolicyMutationResult, error) {
 	eng, err := s.openPolicyEngine(ctx)
 	if err != nil {
 		return PolicyMutationResult{}, err
@@ -324,7 +324,7 @@ func (s *Service) PolicyChangeAdminPassphrase(ctx context.Context, in PolicyRota
 // against the pinned verify key) and REFUSES a committed reservation — only a stuck
 // pending reservation is releasable. No anchor is mutated (the sealed body is
 // untouched), so there is no anchor to land.
-func (s *Service) PolicyRelease(ctx context.Context, in PolicyReleaseInput) (PolicyReleaseResult, error) {
+func (s *Service) PolicyRelease(ctx context.Context, p domain.Principal, in PolicyReleaseInput) (PolicyReleaseResult, error) {
 	if in.ReservationID == "" {
 		return PolicyReleaseResult{}, domain.New(domain.CodeUsage+".missing_arg", "a reservation id is required")
 	}

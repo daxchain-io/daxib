@@ -35,7 +35,7 @@ import (
 // a real intent to spend that change index out-of-band, so the index must be
 // stable; the cost of an abandoned PSBT is one burned change index, same as an
 // abandoned send).
-func (s *Service) PSBTCreate(ctx context.Context, req domain.PSBTCreateRequest) (domain.PSBTResult, error) {
+func (s *Service) PSBTCreate(ctx context.Context, p domain.Principal, req domain.PSBTCreateRequest) (domain.PSBTResult, error) {
 	if err := s.requireNetwork(); err != nil {
 		return domain.PSBTResult{}, err
 	}
@@ -150,7 +150,7 @@ func (s *Service) changeIndexFor(ctx context.Context, wallet, addr string) (uint
 // PSBTDecode is the read-only inspection verb: decode + annotate which inputs/
 // outputs are wallet-owned, the fee/fee-rate/vsize, and which inputs are signed. No
 // keystore/backend/policy.
-func (s *Service) PSBTDecode(ctx context.Context, req domain.PSBTDecodeRequest) (domain.PSBTResult, error) {
+func (s *Service) PSBTDecode(ctx context.Context, p domain.Principal, req domain.PSBTDecodeRequest) (domain.PSBTResult, error) {
 	if err := s.requireNetwork(); err != nil {
 		return domain.PSBTResult{}, err
 	}
@@ -168,7 +168,7 @@ func (s *Service) PSBTDecode(ctx context.Context, req domain.PSBTDecodeRequest) 
 }
 
 // PSBTCombine merges N PSBTs sharing an identical unsigned tx. Pure leaf call.
-func (s *Service) PSBTCombine(ctx context.Context, req domain.PSBTCombineRequest) (domain.PSBTResult, error) {
+func (s *Service) PSBTCombine(ctx context.Context, p domain.Principal, req domain.PSBTCombineRequest) (domain.PSBTResult, error) {
 	if err := s.requireNetwork(); err != nil {
 		return domain.PSBTResult{}, err
 	}
@@ -203,7 +203,7 @@ func (s *Service) PSBTCombine(ctx context.Context, req domain.PSBTCombineRequest
 // PSBTFinalize finalizes a PSBT (assembles FinalScriptWitness from PartialSigs).
 // Pure. A still-incomplete result is reported as Complete=false (not an error — a
 // co-signer may add more sigs).
-func (s *Service) PSBTFinalize(ctx context.Context, req domain.PSBTFinalizeRequest) (domain.PSBTResult, error) {
+func (s *Service) PSBTFinalize(ctx context.Context, p domain.Principal, req domain.PSBTFinalizeRequest) (domain.PSBTResult, error) {
 	if err := s.requireNetwork(); err != nil {
 		return domain.PSBTResult{}, err
 	}
@@ -234,7 +234,7 @@ func (s *Service) PSBTFinalize(ctx context.Context, req domain.PSBTFinalizeReque
 // estimated would underpay) is enforced on the BUILD path (send.go) at create time
 // and by the backend mempool's own relay-fee check at broadcast; an externally
 // supplied PSBT is not second-guessed here.
-func (s *Service) PSBTExtract(ctx context.Context, req domain.PSBTExtractRequest) (domain.PSBTResult, error) {
+func (s *Service) PSBTExtract(ctx context.Context, p domain.Principal, req domain.PSBTExtractRequest) (domain.PSBTResult, error) {
 	if err := s.requireNetwork(); err != nil {
 		return domain.PSBTResult{}, err
 	}
@@ -263,7 +263,7 @@ func (s *Service) PSBTExtract(ctx context.Context, req domain.PSBTExtractRequest
 // PartialSig → journal a `signed` record (PSBTBase64 + JInputs + ReservationID) and
 // leave the reservation RESERVED (committed later by psbt broadcast). On any
 // pre-signature failure the reservation is Released.
-func (s *Service) PSBTSign(ctx context.Context, req domain.PSBTSignRequest, in PSBTSignInput) (domain.PSBTResult, error) {
+func (s *Service) PSBTSign(ctx context.Context, p domain.Principal, req domain.PSBTSignRequest, in PSBTSignInput) (domain.PSBTResult, error) {
 	// (1) Network guards FIRST (mirroring MessageSign): a bound wallet cannot sign off
 	// its locked network.
 	if err := s.requireNetwork(); err != nil {
@@ -567,7 +567,7 @@ func (s *Service) PSBTSign(ctx context.Context, req domain.PSBTSignRequest, in P
 		t, v := splitOutpoint(o.outpoint)
 		jInputs[i] = journal.JInput{Txid: t, Vout: v, ValueSat: o.value, Address: o.address}
 	}
-	rec := s.psbtSignedRecord(wallet, pkt, jInputs, feeCharge, feeRate, b64)
+	rec := s.psbtSignedRecord(p, wallet, pkt, jInputs, feeCharge, feeRate, b64)
 	rec.ReservationID = resv.ID()
 	if jerr := s.journal.Append(ctx, rec); jerr != nil {
 		_ = resv.Release(context.Background())
@@ -589,7 +589,7 @@ func (s *Service) PSBTSign(ctx context.Context, req domain.PSBTSignRequest, in P
 // --yes gated. Its policy charge already happened at sign — the journal
 // ReservationID cross-link (recovered by the unsigned-tx txid) prevents
 // double-charging.
-func (s *Service) PSBTBroadcast(ctx context.Context, req domain.PSBTBroadcastRequest, sink domain.EventSink) (domain.TxResult, error) {
+func (s *Service) PSBTBroadcast(ctx context.Context, p domain.Principal, req domain.PSBTBroadcastRequest, sink domain.EventSink) (domain.TxResult, error) {
 	if err := s.requireNetwork(); err != nil {
 		return domain.TxResult{}, err
 	}

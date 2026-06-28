@@ -20,8 +20,12 @@ import (
 // (1) service.Service is concurrency-safe (file locks hold under N HTTP sessions);
 // (2) handlers keep zero per-connection state (one *mcp.Server serves every
 // connection); (3) progressSink + the SDK's NotifyProgress already deliver over HTTP
-// transparently. The remaining piece is per-principal auth + policy, which threads
-// through the Authenticator below.
+// transparently; (4) the domain.Principal seam (issue #11) is already threaded
+// through every service method, so the Authenticator fills the Principal from the
+// request's bearer token and the handlers pass it straight through — a value
+// change, not a refactor (the journal Source attribution falls out for free). The
+// remaining piece is per-principal auth + policy, which threads through the
+// Authenticator below.
 
 // HTTPOptions is the reserved HTTP listener config. The Authenticator turns a request
 // into the agent identity bound to a per-principal policy; a nil Authenticator means

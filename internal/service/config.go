@@ -19,7 +19,7 @@ import (
 // ConfigList returns every operator-visible config key with its effective value
 // and source. The named-endpoint objects and the policy.* subtree are excluded by
 // internal/config.
-func (s *Service) ConfigList(ctx context.Context) (domain.ConfigListResult, error) {
+func (s *Service) ConfigList(ctx context.Context, p domain.Principal) (domain.ConfigListResult, error) {
 	_ = ctx
 	store, err := s.requireConfig()
 	if err != nil {
@@ -38,7 +38,7 @@ func (s *Service) ConfigList(ctx context.Context) (domain.ConfigListResult, erro
 
 // ConfigGet returns one key's effective value, or ref.not_found (exit 10) for an
 // unknown key / usage.policy_key (exit 2) for a policy.* key.
-func (s *Service) ConfigGet(ctx context.Context, req domain.ConfigGetRequest) (domain.ConfigGetResult, error) {
+func (s *Service) ConfigGet(ctx context.Context, p domain.Principal, req domain.ConfigGetRequest) (domain.ConfigGetResult, error) {
 	_ = ctx
 	store, err := s.requireConfig()
 	if err != nil {
@@ -54,7 +54,7 @@ func (s *Service) ConfigGet(ctx context.Context, req domain.ConfigGetRequest) (d
 // ConfigSet writes one operator key into config.toml via the store's atomic,
 // locked rewrite. It rejects any policy.* key (usage.policy_key, exit 2) and maps a
 // read-only mount to config.read_only (exit 10).
-func (s *Service) ConfigSet(ctx context.Context, req domain.ConfigSetRequest) (domain.ConfigSetResult, error) {
+func (s *Service) ConfigSet(ctx context.Context, p domain.Principal, req domain.ConfigSetRequest) (domain.ConfigSetResult, error) {
 	store, err := s.requireConfig()
 	if err != nil {
 		return domain.ConfigSetResult{}, err

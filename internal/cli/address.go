@@ -40,7 +40,7 @@ func newAddressNewCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.AddressNew(cmd.Context(), domain.AddressNewRequest{
+			res, err := svc.AddressNew(cmd.Context(), domain.LocalCLI(), domain.AddressNewRequest{
 				Wallet: wallet, Change: change,
 			})
 			if err != nil {
@@ -72,7 +72,7 @@ func newAddressListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.AddressList(cmd.Context(), domain.AddressListRequest{Wallet: wallet})
+			res, err := svc.AddressList(cmd.Context(), domain.LocalCLI(), domain.AddressListRequest{Wallet: wallet})
 			if err != nil {
 				return err
 			}

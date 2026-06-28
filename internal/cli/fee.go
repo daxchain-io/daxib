@@ -26,7 +26,7 @@ func newFeeCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.Fee(cmd.Context(), domain.FeeRequest{Speed: speed})
+			res, err := svc.Fee(cmd.Context(), domain.LocalCLI(), domain.FeeRequest{Speed: speed})
 			if err != nil {
 				return err
 			}

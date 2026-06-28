@@ -54,7 +54,7 @@ func newSignMessageCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.MessageSign(cmd.Context(),
+			res, err := svc.MessageSign(cmd.Context(), domain.LocalCLI(),
 				domain.MessageSignRequest{Wallet: wallet, Ref: args[0], Yes: rs.flags.Yes},
 				service.MessageSignInput{
 					Message:         msg,

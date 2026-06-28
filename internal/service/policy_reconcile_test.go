@@ -32,7 +32,7 @@ func TestSignedOrphanSurvivesOfflineOpenReservationIntact(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -44,7 +44,7 @@ func TestSignedOrphanSurvivesOfflineOpenReservationIntact(t *testing.T) {
 	fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "simulated transport failure")
 	}
-	res, _ := svc.SendTx(context.Background(), domain.SendRequest{
+	res, _ := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 
@@ -88,7 +88,7 @@ func TestFailedOrphanReleasedOnOfflineOpen(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -99,7 +99,7 @@ func TestFailedOrphanReleasedOnOfflineOpen(t *testing.T) {
 	fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "simulated transport failure")
 	}
-	res, _ := svc.SendTx(context.Background(), domain.SendRequest{
+	res, _ := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	before := windowUsed(t, svc)
@@ -142,7 +142,7 @@ func TestSignedOrphanReservedWhenJournalReadErrors(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -153,7 +153,7 @@ func TestSignedOrphanReservedWhenJournalReadErrors(t *testing.T) {
 	fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "simulated transport failure")
 	}
-	res, _ := svc.SendTx(context.Background(), domain.SendRequest{
+	res, _ := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	rec, _ := svc.journal.ByID(context.Background(), svc.net, res.JournalID)
@@ -203,7 +203,7 @@ func TestPolicyReleaseFreesStuckReservation(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -214,7 +214,7 @@ func TestPolicyReleaseFreesStuckReservation(t *testing.T) {
 	fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "simulated transport failure")
 	}
-	res, _ := svc.SendTx(context.Background(), domain.SendRequest{
+	res, _ := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	rec, _ := svc.journal.ByID(context.Background(), svc.net, res.JournalID)
@@ -226,7 +226,7 @@ func TestPolicyReleaseFreesStuckReservation(t *testing.T) {
 	}
 
 	// Operator releases the stuck reservation by id (admin passphrase via env).
-	rel, err := svc.PolicyRelease(context.Background(), PolicyReleaseInput{ReservationID: rec.ReservationID})
+	rel, err := svc.PolicyRelease(context.Background(), domain.LocalCLI(), PolicyReleaseInput{ReservationID: rec.ReservationID})
 	if err != nil {
 		t.Fatalf("PolicyRelease: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestPolicyReleaseRefusesCommitted(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -256,7 +256,7 @@ func TestPolicyReleaseRefusesCommitted(t *testing.T) {
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
 	// A successful send commits the reservation.
-	sent, err := svc.SendTx(context.Background(), domain.SendRequest{
+	sent, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	if err != nil {
@@ -267,7 +267,7 @@ func TestPolicyReleaseRefusesCommitted(t *testing.T) {
 		t.Fatalf("precondition: a broadcast record with a reservation id, got %+v", rec)
 	}
 
-	_, rerr := svc.PolicyRelease(context.Background(), PolicyReleaseInput{ReservationID: rec.ReservationID})
+	_, rerr := svc.PolicyRelease(context.Background(), domain.LocalCLI(), PolicyReleaseInput{ReservationID: rec.ReservationID})
 	if rerr == nil {
 		t.Fatal("PolicyRelease must refuse a committed reservation")
 	}

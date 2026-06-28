@@ -101,7 +101,7 @@ func newTxAbandonCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.AbandonTx(cmd.Context(), domain.AbandonRequest{
+			res, err := svc.AbandonTx(cmd.Context(), domain.LocalCLI(), domain.AbandonRequest{
 				Wallet: wallet, Txid: args[0], Yes: yes,
 			})
 			if err != nil {
@@ -146,7 +146,7 @@ func newTxSpeedupCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			defer closeFn()
 			m := rs.flags.Mode()
 			sink := render.StderrProgress(cmd.ErrOrStderr(), m.JSON)
-			res, err := svc.SpeedupTx(cmd.Context(), domain.SpeedupRequest{
+			res, err := svc.SpeedupTx(cmd.Context(), domain.LocalCLI(), domain.SpeedupRequest{
 				Wallet: wallet, Txid: args[0], FeeRate: feeRate, Yes: yes, Wait: waitOpts,
 			}, sink)
 			return renderTxOutcome(cmd, m, res, err)
@@ -186,7 +186,7 @@ func newTxCancelCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			defer closeFn()
 			m := rs.flags.Mode()
 			sink := render.StderrProgress(cmd.ErrOrStderr(), m.JSON)
-			res, err := svc.CancelTx(cmd.Context(), domain.CancelRequest{
+			res, err := svc.CancelTx(cmd.Context(), domain.LocalCLI(), domain.CancelRequest{
 				Wallet: wallet, Txid: args[0], FeeRate: feeRate, Yes: yes, Wait: waitOpts,
 			}, sink)
 			return renderTxOutcome(cmd, m, res, err)
@@ -263,7 +263,7 @@ func newTxSendCmd(ctx context.Context, rs *rootState) *cobra.Command {
 
 			m := rs.flags.Mode()
 			sink := render.StderrProgress(cmd.ErrOrStderr(), m.JSON)
-			res, err := svc.SendTx(cmd.Context(), req, sink)
+			res, err := svc.SendTx(cmd.Context(), domain.LocalCLI(), req, sink)
 			return renderTxOutcome(cmd, m, res, err)
 		},
 	}
@@ -289,7 +289,7 @@ func newTxStatusCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.TxStatus(cmd.Context(), domain.TxStatusRequest{Txid: args[0]})
+			res, err := svc.TxStatus(cmd.Context(), domain.LocalCLI(), domain.TxStatusRequest{Txid: args[0]})
 			if err != nil {
 				return err
 			}
@@ -321,7 +321,7 @@ func newTxWaitCmd(ctx context.Context, rs *rootState) *cobra.Command {
 
 			m := rs.flags.Mode()
 			sink := render.StderrProgress(cmd.ErrOrStderr(), m.JSON)
-			res, err := svc.WaitTx(cmd.Context(), domain.WaitRequest{
+			res, err := svc.WaitTx(cmd.Context(), domain.LocalCLI(), domain.WaitRequest{
 				Txid: args[0], Confirmations: waitOpts.Confirmations, Timeout: waitOpts.Timeout,
 			}, sink)
 			return renderTxOutcome(cmd, m, res, err)
@@ -346,7 +346,7 @@ func newTxListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.ListTxs(cmd.Context(), domain.TxListRequest{Wallet: wallet, Limit: limit})
+			res, err := svc.ListTxs(cmd.Context(), domain.LocalCLI(), domain.TxListRequest{Wallet: wallet, Limit: limit})
 			if err != nil {
 				return err
 			}

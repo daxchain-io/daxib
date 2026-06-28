@@ -60,30 +60,30 @@ func TestRequireNetworkUnset(t *testing.T) {
 	ctx := context.Background()
 	// A representative set of network-requiring ops must all surface
 	// usage.network_required when nothing is selected.
-	if _, err := svc.WalletList(ctx, domain.WalletListRequest{}); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.WalletList(ctx, domain.LocalCLI(), domain.WalletListRequest{}); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("WalletList code = %q, want network_required", code(t, err))
 	}
-	if _, err := svc.WalletShow(ctx, domain.WalletShowRequest{Name: "x"}); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.WalletShow(ctx, domain.LocalCLI(), domain.WalletShowRequest{Name: "x"}); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("WalletShow code = %q, want network_required", code(t, err))
 	}
-	if _, err := svc.AddressList(ctx, domain.AddressListRequest{Wallet: "x"}); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.AddressList(ctx, domain.LocalCLI(), domain.AddressListRequest{Wallet: "x"}); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("AddressList code = %q, want network_required", code(t, err))
 	}
-	if _, err := svc.Fee(ctx, domain.FeeRequest{}); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.Fee(ctx, domain.LocalCLI(), domain.FeeRequest{}); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("Fee code = %q, want network_required", code(t, err))
 	}
-	if _, err := svc.SendTx(ctx, domain.SendRequest{To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Amount: "0.001", FeeRate: "10", Yes: true}, nil); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.SendTx(ctx, domain.LocalCLI(), domain.SendRequest{To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Amount: "0.001", FeeRate: "10", Yes: true}, nil); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("SendTx code = %q, want network_required", code(t, err))
 	}
-	if _, err := svc.MessageSign(ctx, domain.MessageSignRequest{Ref: "x/0/0"}, MessageSignInput{}); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.MessageSign(ctx, domain.LocalCLI(), domain.MessageSignRequest{Ref: "x/0/0"}, MessageSignInput{}); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("MessageSign code = %q, want network_required", code(t, err))
 	}
-	if _, err := svc.PolicyShow(ctx); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.PolicyShow(ctx, domain.LocalCLI()); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("PolicyShow code = %q, want network_required", code(t, err))
 	}
 	// AF1-1: verify must NOT silently apply MAINNET semantics (chainParams("")->
 	// MainNetParams). With no network it fails closed like its sibling MessageSign.
-	if _, err := svc.MessageVerify(ctx, domain.MessageVerifyRequest{
+	if _, err := svc.MessageVerify(ctx, domain.LocalCLI(), domain.MessageVerifyRequest{
 		Address:   "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
 		Message:   "hello",
 		Signature: "AAAA",
@@ -92,14 +92,14 @@ func TestRequireNetworkUnset(t *testing.T) {
 	}
 	// AF1-2: contacts add validates + pins per network; with none it must fail closed,
 	// not silently accept mainnet addresses and pin a blank network.
-	if _, err := svc.ContactAdd(ctx, domain.ContactAddRequest{
+	if _, err := svc.ContactAdd(ctx, domain.LocalCLI(), domain.ContactAddRequest{
 		Name: "alice", Address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
 	}); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("ContactAdd code = %q, want network_required", code(t, err))
 	}
 	// AF1-4: tx list was the lone tx subcommand that succeeded (rc=0) with no network;
 	// it must now fail closed like send/status/abandon/etc.
-	if _, err := svc.ListTxs(ctx, domain.TxListRequest{}); code(t, err) != domain.CodeNetworkRequired {
+	if _, err := svc.ListTxs(ctx, domain.LocalCLI(), domain.TxListRequest{}); code(t, err) != domain.CodeNetworkRequired {
 		t.Errorf("ListTxs code = %q, want network_required", code(t, err))
 	}
 }
@@ -115,7 +115,7 @@ func TestNetworkResolutionPrecedence(t *testing.T) {
 	// Persist defaults.network=signet via NetworkUse (needs a config dir).
 	{
 		svc, done := openNet(t, dir, "", "", cfg, nil)
-		if _, err := svc.NetworkUse(ctx, "signet"); err != nil {
+		if _, err := svc.NetworkUse(ctx, domain.LocalCLI(), "signet"); err != nil {
 			t.Fatalf("NetworkUse(signet): %v", err)
 		}
 		done()
@@ -158,7 +158,7 @@ func TestNetworkUseShowListRoundtrip(t *testing.T) {
 	// Unset: show reports unresolved/unset.
 	{
 		svc, done := openNet(t, dir, "", "", cfg, nil)
-		show, err := svc.NetworkShow(ctx)
+		show, err := svc.NetworkShow(ctx, domain.LocalCLI())
 		if err != nil {
 			t.Fatalf("NetworkShow: %v", err)
 		}
@@ -166,7 +166,7 @@ func TestNetworkUseShowListRoundtrip(t *testing.T) {
 			t.Fatalf("show unset = %+v, want resolved=false source=unset network=\"\"", show)
 		}
 		// list always returns the five, none active when unresolved.
-		list, err := svc.NetworkList(ctx)
+		list, err := svc.NetworkList(ctx, domain.LocalCLI())
 		if err != nil {
 			t.Fatalf("NetworkList: %v", err)
 		}
@@ -179,7 +179,7 @@ func TestNetworkUseShowListRoundtrip(t *testing.T) {
 			}
 		}
 		// use persists.
-		if _, err := svc.NetworkUse(ctx, "testnet4"); err != nil {
+		if _, err := svc.NetworkUse(ctx, domain.LocalCLI(), "testnet4"); err != nil {
 			t.Fatalf("NetworkUse(testnet4): %v", err)
 		}
 		done()
@@ -189,14 +189,14 @@ func TestNetworkUseShowListRoundtrip(t *testing.T) {
 	// it active.
 	{
 		svc, done := openNet(t, dir, "", "", cfg, nil)
-		show, err := svc.NetworkShow(ctx)
+		show, err := svc.NetworkShow(ctx, domain.LocalCLI())
 		if err != nil {
 			t.Fatalf("NetworkShow: %v", err)
 		}
 		if !show.Resolved || show.Network != "testnet4" || show.Source != "config" {
 			t.Fatalf("show after use = %+v, want testnet4/config/resolved", show)
 		}
-		list, _ := svc.NetworkList(ctx)
+		list, _ := svc.NetworkList(ctx, domain.LocalCLI())
 		var active string
 		for _, n := range list.Networks {
 			if n.Active {
@@ -207,7 +207,7 @@ func TestNetworkUseShowListRoundtrip(t *testing.T) {
 			t.Fatalf("active network = %q, want testnet4", active)
 		}
 		// Clear it.
-		if _, err := svc.NetworkUse(ctx, ""); err != nil {
+		if _, err := svc.NetworkUse(ctx, domain.LocalCLI(), ""); err != nil {
 			t.Fatalf("NetworkUse(clear): %v", err)
 		}
 		done()
@@ -238,7 +238,7 @@ func TestAgnosticCreateWithoutNetworkSucceeds(t *testing.T) {
 	svc, done := openNet(t, dir, "", "", cfg, env)
 	defer done()
 
-	res, err := svc.WalletCreate(ctx, domain.WalletCreateRequest{Name: "agno", Words: 12}, WalletCreateInput{})
+	res, err := svc.WalletCreate(ctx, domain.LocalCLI(), domain.WalletCreateRequest{Name: "agno", Words: 12}, WalletCreateInput{})
 	if err != nil {
 		t.Fatalf("agnostic create with no network: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestAgnosticCreateWithoutNetworkSucceeds(t *testing.T) {
 	}
 
 	// A --bind create with no network is usage.network_required.
-	_, berr := svc.WalletCreate(ctx, domain.WalletCreateRequest{Name: "bound", Words: 12, Bind: true}, WalletCreateInput{})
+	_, berr := svc.WalletCreate(ctx, domain.LocalCLI(), domain.WalletCreateRequest{Name: "bound", Words: 12, Bind: true}, WalletCreateInput{})
 	if berr == nil {
 		t.Fatal("bind create with no network: expected usage.network_required")
 	}

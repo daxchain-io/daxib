@@ -46,12 +46,12 @@ func newConfiguredService(t *testing.T, esploraURL string) (*Service, func()) {
 	}
 
 	// Register + select the httptest Esplora backend for mainnet.
-	if _, _, err := svc.BackendAdd(context.Background(), domain.BackendAddRequest{
+	if _, _, err := svc.BackendAdd(context.Background(), domain.LocalCLI(), domain.BackendAddRequest{
 		Name: "test-esplora", Network: "mainnet", Type: domain.BackendEsplora, URL: esploraURL,
 	}); err != nil {
 		t.Fatalf("BackendAdd: %v", err)
 	}
-	if _, err := svc.BackendUse(context.Background(), domain.BackendUseRequest{Name: "test-esplora"}); err != nil {
+	if _, err := svc.BackendUse(context.Background(), domain.LocalCLI(), domain.BackendUseRequest{Name: "test-esplora"}); err != nil {
 		t.Fatalf("BackendUse: %v", err)
 	}
 	return svc, func() { _ = svc.Close() }
@@ -60,7 +60,7 @@ func newConfiguredService(t *testing.T, esploraURL string) (*Service, func()) {
 // importCanonical imports the canonical-vector wallet (mnemonic from stdin).
 func importCanonical(t *testing.T, svc *Service, name string) {
 	t.Helper()
-	if _, err := svc.WalletImport(context.Background(),
+	if _, err := svc.WalletImport(context.Background(), domain.LocalCLI(),
 		domain.WalletImportRequest{Name: name, Network: "mainnet"},
 		WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
@@ -90,7 +90,7 @@ func TestBalanceIntegration_Esplora(t *testing.T) {
 	defer done()
 	importCanonical(t, svc, "vec")
 
-	res, err := svc.Balance(context.Background(), domain.BalanceRequest{Wallet: "vec", UTXOs: true})
+	res, err := svc.Balance(context.Background(), domain.LocalCLI(), domain.BalanceRequest{Wallet: "vec", UTXOs: true})
 	if err != nil {
 		t.Fatalf("Balance: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestUTXOListIntegration_Esplora(t *testing.T) {
 	defer done()
 	importCanonical(t, svc, "vec")
 
-	res, err := svc.UTXOList(context.Background(), domain.UTXOListRequest{Wallet: "vec"})
+	res, err := svc.UTXOList(context.Background(), domain.LocalCLI(), domain.UTXOListRequest{Wallet: "vec"})
 	if err != nil {
 		t.Fatalf("UTXOList: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestBackendTest_HappyPath(t *testing.T) {
 	svc, done := newConfiguredService(t, srv.URL)
 	defer done()
 
-	res, err := svc.BackendTest(context.Background(), domain.BackendTestRequest{Name: "test-esplora"})
+	res, err := svc.BackendTest(context.Background(), domain.LocalCLI(), domain.BackendTestRequest{Name: "test-esplora"})
 	if err != nil {
 		t.Fatalf("BackendTest: %v", err)
 	}

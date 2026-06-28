@@ -22,7 +22,7 @@ func TestConfigGetSetRoundtrip(t *testing.T) {
 	const key = "networks.mainnet.default-backend"
 
 	// Get reflects the BackendUse selection from setup.
-	got, err := svc.ConfigGet(ctx, domain.ConfigGetRequest{Key: key})
+	got, err := svc.ConfigGet(ctx, domain.LocalCLI(), domain.ConfigGetRequest{Key: key})
 	if err != nil {
 		t.Fatalf("ConfigGet: %v", err)
 	}
@@ -31,25 +31,25 @@ func TestConfigGetSetRoundtrip(t *testing.T) {
 	}
 
 	// Clearing the default (empty value) is allowed and round-trips.
-	if _, err := svc.ConfigSet(ctx, domain.ConfigSetRequest{Key: key, Value: ""}); err != nil {
+	if _, err := svc.ConfigSet(ctx, domain.LocalCLI(), domain.ConfigSetRequest{Key: key, Value: ""}); err != nil {
 		t.Fatalf("ConfigSet clear: %v", err)
 	}
-	got, _ = svc.ConfigGet(ctx, domain.ConfigGetRequest{Key: key})
+	got, _ = svc.ConfigGet(ctx, domain.LocalCLI(), domain.ConfigGetRequest{Key: key})
 	if got.Value != "" {
 		t.Fatalf("after clear %s = %q; want empty", key, got.Value)
 	}
 
 	// Re-setting it to the existing mainnet backend round-trips.
-	if _, err := svc.ConfigSet(ctx, domain.ConfigSetRequest{Key: key, Value: "fake-x"}); err != nil {
+	if _, err := svc.ConfigSet(ctx, domain.LocalCLI(), domain.ConfigSetRequest{Key: key, Value: "fake-x"}); err != nil {
 		t.Fatalf("ConfigSet fake-x: %v", err)
 	}
-	got, _ = svc.ConfigGet(ctx, domain.ConfigGetRequest{Key: key})
+	got, _ = svc.ConfigGet(ctx, domain.LocalCLI(), domain.ConfigGetRequest{Key: key})
 	if got.Value != "fake-x" {
 		t.Fatalf("after set %s = %q; want fake-x", key, got.Value)
 	}
 
 	// List includes the key with its effective value + source "file".
-	list, err := svc.ConfigList(ctx)
+	list, err := svc.ConfigList(ctx, domain.LocalCLI())
 	if err != nil {
 		t.Fatalf("ConfigList: %v", err)
 	}
@@ -67,26 +67,26 @@ func TestConfigGetSetRoundtrip(t *testing.T) {
 	}
 
 	// Setting to a non-existent backend is a not_found (exit 10).
-	if _, err := svc.ConfigSet(ctx, domain.ConfigSetRequest{Key: key, Value: "ghost"}); err == nil {
+	if _, err := svc.ConfigSet(ctx, domain.LocalCLI(), domain.ConfigSetRequest{Key: key, Value: "ghost"}); err == nil {
 		t.Fatal("ConfigSet ghost: want error, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitNotFound {
 		t.Errorf("ghost exit=%d; want %d (not_found)", de.Exit, domain.ExitNotFound)
 	}
 
 	// A policy.* key is rejected on BOTH get and set (the sealed-anchor carve-out).
-	if _, err := svc.ConfigSet(ctx, domain.ConfigSetRequest{Key: "policy.max-tx", Value: "100000"}); err == nil {
+	if _, err := svc.ConfigSet(ctx, domain.LocalCLI(), domain.ConfigSetRequest{Key: "policy.max-tx", Value: "100000"}); err == nil {
 		t.Fatal("ConfigSet policy.max-tx: want rejection, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitUsage {
 		t.Errorf("policy-set exit=%d; want %d (usage)", de.Exit, domain.ExitUsage)
 	}
-	if _, err := svc.ConfigGet(ctx, domain.ConfigGetRequest{Key: "policy.max-tx"}); err == nil {
+	if _, err := svc.ConfigGet(ctx, domain.LocalCLI(), domain.ConfigGetRequest{Key: "policy.max-tx"}); err == nil {
 		t.Fatal("ConfigGet policy.max-tx: want rejection, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitUsage {
 		t.Errorf("policy-get exit=%d; want %d (usage)", de.Exit, domain.ExitUsage)
 	}
 
 	// An unknown key is ref.not_found (exit 10).
-	if _, err := svc.ConfigGet(ctx, domain.ConfigGetRequest{Key: "no.such.key"}); err == nil {
+	if _, err := svc.ConfigGet(ctx, domain.LocalCLI(), domain.ConfigGetRequest{Key: "no.such.key"}); err == nil {
 		t.Fatal("ConfigGet unknown: want not_found, got nil")
 	} else if de := domain.AsError(err); de.Exit != domain.ExitNotFound {
 		t.Errorf("unknown-key exit=%d; want %d (not_found)", de.Exit, domain.ExitNotFound)
@@ -99,7 +99,7 @@ func TestConfigGetSetRoundtrip(t *testing.T) {
 		"networks.signett.default-backend", // a near-miss typo of "signet"
 		"networks.bogusnet.default-backend",
 	} {
-		if _, err := svc.ConfigGet(ctx, domain.ConfigGetRequest{Key: badKey}); err == nil {
+		if _, err := svc.ConfigGet(ctx, domain.LocalCLI(), domain.ConfigGetRequest{Key: badKey}); err == nil {
 			t.Fatalf("ConfigGet %q: want not_found, got nil (GET/SET asymmetry)", badKey)
 		} else if de := domain.AsError(err); de.Exit != domain.ExitNotFound {
 			t.Errorf("bad-network-get %q exit=%d; want %d (not_found)", badKey, de.Exit, domain.ExitNotFound)

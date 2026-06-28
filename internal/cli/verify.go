@@ -38,7 +38,7 @@ func newVerifyCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.MessageVerify(cmd.Context(), domain.MessageVerifyRequest{
+			res, err := svc.MessageVerify(cmd.Context(), domain.LocalCLI(), domain.MessageVerifyRequest{
 				Address:   address,
 				Message:   string(msg),
 				Signature: signature,

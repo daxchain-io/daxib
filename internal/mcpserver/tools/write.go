@@ -35,10 +35,11 @@ import (
 // The ceremony NEVER touches To/Amount/FeeRate/Speed/Wallet — those are the agent's
 // inputs, passed verbatim.
 
-// sendSink is the shape of the send service method: (ctx, SendRequest, EventSink) →
-// (TxResult, error). daxib's send takes no Principal (the core is single-tenant in
-// v1).
-type sendSink func(context.Context, domain.SendRequest, domain.EventSink) (domain.TxResult, error)
+// sendSink is the shape of the send service method: (ctx, Principal,
+// SendRequest, EventSink) → (TxResult, error). The MCP frontend passes
+// domain.LocalMCP() so an agent-initiated send is journaled Source:"mcp"
+// (issue #11).
+type sendSink func(context.Context, domain.Principal, domain.SendRequest, domain.EventSink) (domain.TxResult, error)
 
 // addSend registers the send tool — the §6.4 central guarantee. The handler is the
 // SAME call the CLI runs: same request struct, same service method, so
@@ -53,7 +54,7 @@ func addSend(srv *mcp.Server, name, desc string, fn sendSink) {
 	mcp.AddTool(srv, withSchemas[domain.SendRequest, domain.TxResult](writeToolDef(name, desc)),
 		func(ctx context.Context, req *mcp.CallToolRequest, in domain.SendRequest) (*mcp.CallToolResult, *domain.TxResult, error) {
 			sendCeremony(&in) // §6.4 ceremony: Yes/Wait; never a policy field
-			out, err := fn(ctx, in, progressSink(ctx, req))
+			out, err := fn(ctx, domain.LocalMCP(), in, progressSink(ctx, req))
 			if dualSignal(err) {
 				return dualResult(err), &out, nil // BOTH IsError + structured Out
 			}
@@ -78,7 +79,7 @@ func sendCeremony(in *domain.SendRequest) {
 // stored xpub — no passphrase, no signing — so it is NOT in the signing set; it uses
 // the write annotations only because it MUTATES the wallet's watermark (it advances
 // the next-index). There is no ceremony and no dual-signal.
-type addressNewFn func(context.Context, domain.AddressNewRequest) (domain.AddressNewResult, error)
+type addressNewFn func(context.Context, domain.Principal, domain.AddressNewRequest) (domain.AddressNewResult, error)
 
 // addAddressNew registers the address_new tool — the agent's sanctioned path to a
 // fresh invoice address (mirroring how daxie exposes receive's new-address but NOT
@@ -87,7 +88,7 @@ type addressNewFn func(context.Context, domain.AddressNewRequest) (domain.Addres
 func addAddressNew(srv *mcp.Server, name, desc string, fn addressNewFn) {
 	mcp.AddTool(srv, withSchemas[domain.AddressNewRequest, domain.AddressNewResult](writeToolDef(name, desc)),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in domain.AddressNewRequest) (*mcp.CallToolResult, *domain.AddressNewResult, error) {
-			out, err := fn(ctx, in)
+			out, err := fn(ctx, domain.LocalMCP(), in)
 			if err != nil {
 				return nil, nil, toolError(err)
 			}
@@ -98,8 +99,8 @@ func addAddressNew(srv *mcp.Server, name, desc string, fn addressNewFn) {
 // speedupFn / cancelFn are the RBF-replacement service shapes (GAP-2): same shape as
 // send — (ctx, In, EventSink) → (TxResult, error) — because a speedup/cancel is a
 // fresh coin-select → policy.Reserve → sign → broadcast inside the service method.
-type speedupFn func(context.Context, domain.SpeedupRequest, domain.EventSink) (domain.TxResult, error)
-type cancelFn func(context.Context, domain.CancelRequest, domain.EventSink) (domain.TxResult, error)
+type speedupFn func(context.Context, domain.Principal, domain.SpeedupRequest, domain.EventSink) (domain.TxResult, error)
+type cancelFn func(context.Context, domain.Principal, domain.CancelRequest, domain.EventSink) (domain.TxResult, error)
 
 // addSpeedup registers the tx_speedup tool (GAP-2). It rides the SAME guardrails as
 // send: the service method coin-selects the replacement and runs policy.Reserve
@@ -111,7 +112,7 @@ func addSpeedup(srv *mcp.Server, name, desc string, fn speedupFn) {
 		func(ctx context.Context, req *mcp.CallToolRequest, in domain.SpeedupRequest) (*mcp.CallToolResult, *domain.TxResult, error) {
 			in.Yes = true
 			in.Wait.Enabled = true
-			out, err := fn(ctx, in, progressSink(ctx, req))
+			out, err := fn(ctx, domain.LocalMCP(), in, progressSink(ctx, req))
 			if dualSignal(err) {
 				return dualResult(err), &out, nil
 			}
@@ -129,7 +130,7 @@ func addCancel(srv *mcp.Server, name, desc string, fn cancelFn) {
 		func(ctx context.Context, req *mcp.CallToolRequest, in domain.CancelRequest) (*mcp.CallToolResult, *domain.TxResult, error) {
 			in.Yes = true
 			in.Wait.Enabled = true
-			out, err := fn(ctx, in, progressSink(ctx, req))
+			out, err := fn(ctx, domain.LocalMCP(), in, progressSink(ctx, req))
 			if dualSignal(err) {
 				return dualResult(err), &out, nil
 			}
@@ -146,7 +147,7 @@ func addCancel(srv *mcp.Server, name, desc string, fn cancelFn) {
 // `message` field (no float, no secret) and the keystore passphrase resolves from the
 // out-of-band env channel (PassphraseStdin/File left zero), EXACTLY like send. It is
 // keystore-gated, not policy-gated: it unlocks a key but moves no funds.
-type signMessageFn func(context.Context, domain.MessageSignRequest, service.MessageSignInput) (domain.MessageSignResult, error)
+type signMessageFn func(context.Context, domain.Principal, domain.MessageSignRequest, service.MessageSignInput) (domain.MessageSignResult, error)
 
 // addSignMessage registers the sign_message tool (GAP-2). The handler binds the SAME
 // domain.MessageSignRequest the CLI `sign message` binds and constructs the
@@ -157,7 +158,7 @@ type signMessageFn func(context.Context, domain.MessageSignRequest, service.Mess
 func addSignMessage(srv *mcp.Server, name, desc string, fn signMessageFn) {
 	mcp.AddTool(srv, withSchemas[domain.MessageSignRequest, domain.MessageSignResult](signToolDef(name, desc)),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in domain.MessageSignRequest) (*mcp.CallToolResult, *domain.MessageSignResult, error) {
-			out, err := fn(ctx, in, service.MessageSignInput{Message: []byte(in.Message)})
+			out, err := fn(ctx, domain.LocalMCP(), in, service.MessageSignInput{Message: []byte(in.Message)})
 			if err != nil {
 				return nil, nil, toolError(err)
 			}
@@ -173,13 +174,13 @@ func addSignMessage(srv *mcp.Server, name, desc string, fn signMessageFn) {
 // input's passphrase channels left zero), EXACTLY like sign_message; Yes is
 // constant-true (the §6.4 confirmation ceremony cannot exist over a tool call — NOT
 // a policy waiver).
-type psbtSignFn func(context.Context, domain.PSBTSignRequest, service.PSBTSignInput) (domain.PSBTResult, error)
+type psbtSignFn func(context.Context, domain.Principal, domain.PSBTSignRequest, service.PSBTSignInput) (domain.PSBTResult, error)
 
 func addPSBTSign(srv *mcp.Server, name, desc string, fn psbtSignFn) {
 	mcp.AddTool(srv, withSchemas[domain.PSBTSignRequest, domain.PSBTResult](signToolDef(name, desc)),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in domain.PSBTSignRequest) (*mcp.CallToolResult, *domain.PSBTResult, error) {
 			in.Yes = true // §6.4 ceremony: the TTY confirmation cannot exist over a tool call
-			out, err := fn(ctx, in, service.PSBTSignInput{})
+			out, err := fn(ctx, domain.LocalMCP(), in, service.PSBTSignInput{})
 			if err != nil {
 				return nil, nil, toolError(err)
 			}
@@ -192,14 +193,14 @@ func addPSBTSign(srv *mcp.Server, name, desc string, fn psbtSignFn) {
 // already happened at sign; this commits the cross-linked reservation). The §6.4
 // ceremony applies (Yes constant-true, Wait default-on); a tx.wait_timeout
 // dual-signals (IsError + Out).
-type psbtBroadcastFn func(context.Context, domain.PSBTBroadcastRequest, domain.EventSink) (domain.TxResult, error)
+type psbtBroadcastFn func(context.Context, domain.Principal, domain.PSBTBroadcastRequest, domain.EventSink) (domain.TxResult, error)
 
 func addPSBTBroadcast(srv *mcp.Server, name, desc string, fn psbtBroadcastFn) {
 	mcp.AddTool(srv, withSchemas[domain.PSBTBroadcastRequest, domain.TxResult](writeToolDef(name, desc)),
 		func(ctx context.Context, req *mcp.CallToolRequest, in domain.PSBTBroadcastRequest) (*mcp.CallToolResult, *domain.TxResult, error) {
 			in.Yes = true
 			in.Wait.Enabled = true
-			out, err := fn(ctx, in, progressSink(ctx, req))
+			out, err := fn(ctx, domain.LocalMCP(), in, progressSink(ctx, req))
 			if dualSignal(err) {
 				return dualResult(err), &out, nil
 			}

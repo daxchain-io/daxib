@@ -219,7 +219,7 @@ func (s *Service) walletScripts(ctx context.Context, wallet string) map[string]b
 // empty (the PSBT may still need a co-signer), PSBTBase64 set, JInputs = the
 // consumed owned outpoints (so coin-selection won't double-spend them), and the
 // recipient/fee attribution. ReservationID is set by the caller.
-func (s *Service) psbtSignedRecord(wallet string, pkt *btcpsbt.Packet, inputs []journal.JInput, feeSat, feeRate int64, b64 string) *journal.Record {
+func (s *Service) psbtSignedRecord(p domain.Principal, wallet string, pkt *btcpsbt.Packet, inputs []journal.JInput, feeSat, feeRate int64, b64 string) *journal.Record {
 	outputs := make([]journal.JOutput, 0, len(pkt.UnsignedTx.TxOut))
 	params := s.chainParams()
 	byScript := s.walletScripts(context.Background(), wallet)
@@ -232,7 +232,7 @@ func (s *Service) psbtSignedRecord(wallet string, pkt *btcpsbt.Packet, inputs []
 		Network:    string(s.net),
 		Wallet:     wallet,
 		Status:     journal.StatusSigned,
-		Source:     "cli",
+		Source:     sourceOf(p),
 		Txid:       pkt.UnsignedTx.TxHash().String(),
 		RawTx:      "", // a partial PSBT carries no broadcastable bytes yet
 		FeeRate:    feeRate,

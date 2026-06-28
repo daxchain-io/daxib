@@ -30,7 +30,7 @@ const defaultReceivePoll = 5 * time.Second
 // (result, nil) with result.Exit==8 (the terminal event is already emitted) — the
 // caller projects the exit; only true failures (bad wallet, rpc.unreachable,
 // keystore.read_only on --new) come back as a non-nil error.
-func (s *Service) Receive(ctx context.Context, req domain.ReceiveRequest, sink domain.ReceiveEventSink) (domain.ReceiveResult, error) {
+func (s *Service) Receive(ctx context.Context, p domain.Principal, req domain.ReceiveRequest, sink domain.ReceiveEventSink) (domain.ReceiveResult, error) {
 	wallet, err := s.resolveWallet(ctx, req.Wallet)
 	if err != nil {
 		return domain.ReceiveResult{}, err

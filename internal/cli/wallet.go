@@ -63,7 +63,7 @@ func newWalletCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.WalletCreate(cmd.Context(), domain.WalletCreateRequest{
+			res, err := svc.WalletCreate(cmd.Context(), domain.LocalCLI(), domain.WalletCreateRequest{
 				Name: args[0], Words: words, Network: network, Bind: bind, Yes: rs.flags.Yes,
 			}, service.WalletCreateInput{
 				PassphraseStdin: pf.stdin, PassphraseFile: pf.file,
@@ -135,7 +135,7 @@ func newWalletImportCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.WalletImport(cmd.Context(), domain.WalletImportRequest{
+			res, err := svc.WalletImport(cmd.Context(), domain.LocalCLI(), domain.WalletImportRequest{
 				Name: args[0], Network: network, Bind: bind, Yes: rs.flags.Yes,
 			}, service.WalletImportInput{
 				MnemonicStdin: mf.stdin, MnemonicFile: mf.file,
@@ -184,7 +184,7 @@ func newWalletListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.WalletList(cmd.Context(), domain.WalletListRequest{})
+			res, err := svc.WalletList(cmd.Context(), domain.LocalCLI(), domain.WalletListRequest{})
 			if err != nil {
 				return err
 			}
@@ -219,7 +219,7 @@ func newWalletShowCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.WalletShow(cmd.Context(), domain.WalletShowRequest{Name: args[0]})
+			res, err := svc.WalletShow(cmd.Context(), domain.LocalCLI(), domain.WalletShowRequest{Name: args[0]})
 			if err != nil {
 				return err
 			}
@@ -258,7 +258,7 @@ func newWalletExportCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.WalletExport(cmd.Context(), domain.WalletExportRequest{
+			res, err := svc.WalletExport(cmd.Context(), domain.LocalCLI(), domain.WalletExportRequest{
 				Name: args[0], Yes: rs.flags.Yes,
 			}, service.WalletExportInput{PassphraseStdin: pf.stdin, PassphraseFile: pf.file})
 			if err != nil {
@@ -303,7 +303,7 @@ func newWalletUpgradeCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.WalletUpgrade(cmd.Context(), domain.WalletUpgradeRequest{
+			res, err := svc.WalletUpgrade(cmd.Context(), domain.LocalCLI(), domain.WalletUpgradeRequest{
 				Name: args[0], Yes: rs.flags.Yes,
 			}, service.WalletUpgradeInput{PassphraseStdin: pf.stdin, PassphraseFile: pf.file})
 			if err != nil {
