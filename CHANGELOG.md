@@ -6,6 +6,12 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-27
+
+The first feature release on the stable v1.0 surface — **additive and
+backward-compatible**. Every v1.0 command, `--json` schema, exit code, and on-disk
+format is unchanged; this adds the `psbt` noun (and three MCP tools).
+
 ### Added
 
 - **`psbt` — BIP-174 partially-signed Bitcoin transactions** for hardware-wallet /

@@ -15,7 +15,7 @@ Ed25519-sealed policy, one signing chokepoint) re-grounded on Bitcoin's UTXO mod
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](https://go.dev/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: `v1.0.0` — stable.** The CLI command surface, the `--json` schemas, the
+> **Status: `v1.1.0` — stable.** The CLI command surface, the `--json` schemas, the
 > exit codes, the MCP tool surface, and the on-disk formats are **semver-protected**:
 > a breaking change bumps the major version. Validated end-to-end against a real
 > `bitcoind` regtest node in CI. Daxib signs and broadcasts real transactions and its
