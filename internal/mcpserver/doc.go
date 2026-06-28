@@ -7,7 +7,7 @@
 // provider imports (policy/policyseal/keys/backend/coinselect/journal/config/secret/
 // fsx) that any logic would require. It imports ONLY service + domain (+ version),
 // exactly like cli, plus the third-party MCP SDK and stdlib net/http+crypto/tls for
-// the reserved v1.1 transport seam.
+// the reserved HTTP transport seam (planned).
 //
 // The central guarantee (§6.4): guardrails bind MCP IDENTICALLY because the send tool
 // routes through the same svc.SendTx method — the only path that coin-selects then
@@ -22,7 +22,7 @@
 // ONCE (registers all tools via tools.Register) and never changes when a transport is
 // added. ServeStdio is the v1 wiring; Serve is the --transport switch (stdio served,
 // http REJECTED in v1 with a forward-pointing domain.Error). ServeHTTP + HTTPOptions
-// are the reserved v1.1 seam (declared so an auth hook has a home; the body refuses in
+// are the reserved HTTP seam (planned) (declared so an auth hook has a home; the body refuses in
 // v1). v1 builds none of HTTP or auth — it builds the seams that make them additive (a
 // new enum value + a new-file body, not a refactor).
 //
@@ -42,6 +42,6 @@
 // call them, and mcpserver imports tools for Register, so tools cannot import mcpserver
 // — that subpackage is their cycle-free home). This core package owns the
 // transport-agnostic Server assembly (New), the §6.8 transport switch (Serve/ServeStdio,
-// http rejected), the reserved v1.1 HTTP+auth seam (ServeHTTP/HTTPOptions), and tool
+// http rejected), the reserved HTTP+auth seam (planned) (ServeHTTP/HTTPOptions), and tool
 // introspection (ListTools for `daxib mcp tools` and the golden-schema test).
 package mcpserver

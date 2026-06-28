@@ -15,8 +15,8 @@ import (
 //
 //   - `daxib mcp serve --transport stdio` opens the SAME service every command opens,
 //     builds the transport-agnostic *mcp.Server (mcpserver.New), and serves it.
-//     --transport defaults to "stdio"; "http" is REJECTED in v1 with a
-//     forward-pointing usage.unsupported error (the v1.1 seam is reserved, §6.8). This
+//     --transport defaults to "stdio"; "http" is REJECTED with a
+//     forward-pointing usage.unsupported error (the HTTP seam is reserved; see issue #12). This
 //     is the ONE sanctioned cli→mcpserver import edge (the arch matrix allows it).
 //   - `daxib mcp tools [<name>]` introspects the registered surface (§6.7): the
 //     compact TOOL/KIND/DESCRIPTION table + footer, or --json the exact tools/list
@@ -33,7 +33,7 @@ func newMcpCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		Short: "Run the MCP server (Frontend 2) or inspect its tools",
 		Long: "Daxib's Model Context Protocol server exposes the SAME wallet over the SAME\n" +
 			"policy guardrails as the CLI — a second thin frontend, not a second core.\n\n" +
-			"`mcp serve` runs the server over stdio (the v1 transport; http ships in v1.1).\n" +
+			"`mcp serve` runs the server over stdio (the only transport today; http is planned — issue #12).\n" +
 			"`mcp tools` prints the tool surface a connecting client sees — tools that can\n" +
 			"move funds within policy and read everything, but cannot mutate policy, create/\n" +
 			"import/export wallets, or repoint the backend (the §6.1 exclusion boundary).",
@@ -52,12 +52,12 @@ func newMcpServeCmd(ctx context.Context, rs *rootState) *cobra.Command {
 	var transport string
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Serve the MCP tool surface over a transport (v1: stdio)",
+		Short: "Serve the MCP tool surface over a transport (stdio)",
 		Long: "Open the wallet and serve the MCP server until the client disconnects or the\n" +
 			"process is signaled (SIGINT/SIGTERM). The same guardrails the CLI enforces apply\n" +
 			"identically to MCP-initiated signing (policy.Reserve runs in the core, below both\n" +
 			"frontends).\n\nExamples:\n" +
-			"  daxib mcp serve                   # stdio (the default and only v1 transport)\n" +
+			"  daxib mcp serve                   # stdio (the default and only transport today)\n" +
 			"  daxib mcp serve --transport stdio\n\n" +
 			"The keystore passphrase is acquired the same way as every signing command\n" +
 			"(DAXIB_PASSPHRASE[_FILE]); a long-lived server caches its unlock — restart after a\n" +
@@ -70,7 +70,7 @@ func newMcpServeCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			// domain.Error.
 			if transport == "http" {
 				return domain.New("usage.unsupported",
-					"the http transport ships in v1.1; v1 serves MCP over --transport stdio only")
+					"the http transport is not yet available; serve MCP over --transport stdio")
 			}
 
 			svc, closeFn, err := openService(ctx, rs)
@@ -86,7 +86,7 @@ func newMcpServeCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&transport, "transport", "stdio",
-		"MCP transport: stdio (v1; http reserved for v1.1)")
+		"MCP transport: stdio (http not yet available)")
 	return cmd
 }
 

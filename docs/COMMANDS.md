@@ -1285,7 +1285,7 @@ unlock — restart after a keystore passphrase change.
 
 | Flag | Default | What it does |
 | --- | --- | --- |
-| `--transport <stdio>` | `stdio` | MCP transport (v1: `stdio`; `http` reserved for v1.1). |
+| `--transport <stdio>` | `stdio` | MCP transport (`stdio`; `http` is planned — see [issue #12](https://github.com/daxchain-io/daxib/issues/12)). |
 
 - Exit codes: `0` (clean shutdown); `2` (`usage.network_required`); `4`
   (keystore passphrase); `10` (`keystore.not_found`); plus the runtime classes

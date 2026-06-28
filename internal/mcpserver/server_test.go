@@ -138,7 +138,7 @@ func TestExcludedToolsAreAbsent(t *testing.T) {
 }
 
 // TestServeRejectsHTTP pins the §6.8 v1 transport contract: stdio is the only accepted
-// transport; http is rejected with a forward-pointing usage.* domain.Error (so v1.1
+// transport; http is rejected with a forward-pointing usage.* domain.Error (so HTTP lands later and
 // flips it on with a new file + enum value, not a refactor); an unknown transport is a
 // usage error. (stdio is not exercised here — it would block on the real transport;
 // the in-memory pipe + the cli serve smoke cover the serving path.)
@@ -165,15 +165,15 @@ func TestServeRejectsHTTP(t *testing.T) {
 	}
 }
 
-// TestServeHTTPSeamRefuses pins the reserved v1.1 ServeHTTP seam (§6.8): the signature
-// exists so the auth hook + HTTP handler have a home in v1.1, but the v1 body REFUSES
+// TestServeHTTPSeamRefuses pins the reserved ServeHTTP seam (planned) (§6.8): the signature
+// exists so the auth hook + HTTP handler have a home, but the body REFUSES today
 // (no net/http server is started). This guards that the seam is declared and inert,
 // not accidentally wired.
 func TestServeHTTPSeamRefuses(t *testing.T) {
 	srv := New(nil)
 	err := ServeHTTP(context.Background(), srv, HTTPOptions{Addr: "127.0.0.1:0"})
 	if err == nil {
-		t.Fatal("ServeHTTP returned nil in v1; the HTTP transport ships in v1.1 and must refuse now (§6.8)")
+		t.Fatal("ServeHTTP returned nil in v1; the HTTP transport is not yet available and ServeHTTP must refuse (§6.8)")
 	}
 	if code := domain.AsError(err).Code; !strings.HasPrefix(code, "usage.") {
 		t.Errorf("ServeHTTP refusal code = %q, want a usage.* code", code)

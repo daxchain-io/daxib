@@ -102,8 +102,8 @@ func TestMcpServeRejectsHTTP(t *testing.T) {
 	if code != int(domain.ExitUsage) {
 		t.Fatalf("mcp serve --transport http exit = %d, want %d (USAGE); stderr=%s", code, domain.ExitUsage, stderr)
 	}
-	if !strings.Contains(stderr, "v1.1") {
-		t.Errorf("http rejection should point forward to v1.1: %s", stderr)
+	if !strings.Contains(stderr, "not yet available") || !strings.Contains(stderr, "stdio") {
+		t.Errorf("http rejection should explain it is not yet available + point to stdio: %s", stderr)
 	}
 
 	_, _, code = execCLI(t, "mcp", "serve", "--transport", "websocket")

@@ -120,19 +120,19 @@ func isToolError(res mcp.Result) bool {
 	return ok && ctr != nil && ctr.IsError
 }
 
-// Serve is the §6.8 transport switch the cli binds. stdio is the ONLY accepted value
-// in v1; http is rejected with a forward-pointing domain.Error so the CLI contract is
-// stable when v1.1 flips it on (a new enum value + a transport_http.go body, not a
-// refactor). An unknown value is a usage error.
+// Serve is the transport switch the cli binds. stdio is the ONLY accepted value
+// today; http is rejected with a forward-pointing domain.Error so the CLI contract is
+// stable when HTTP lands (a new enum value + a transport_http.go body, not a refactor;
+// tracked in issue #12). An unknown value is a usage error.
 func Serve(ctx context.Context, srv *mcp.Server, transport string) error {
 	switch transport {
 	case "", "stdio":
 		return ServeStdio(ctx, srv)
 	case "http":
 		return domain.New("usage.unsupported",
-			"the http transport ships in v1.1; v1 serves MCP over --transport stdio only")
+			"the http transport is not yet available; serve MCP over --transport stdio")
 	default:
-		return domain.Newf("usage.invalid", "unknown --transport %q (v1: stdio)", transport)
+		return domain.Newf("usage.invalid", "unknown --transport %q (only stdio is supported)", transport)
 	}
 }
 
