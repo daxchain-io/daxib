@@ -29,7 +29,9 @@ var wantTools = []string{
 	"verify", "convert",
 	"tx_status", "tx_wait", "tx_list",
 	"policy_show", "policy_check",
+	"psbt_decode",
 	"send", "tx_speedup", "tx_cancel", "address_new", "sign_message",
+	"psbt_sign", "psbt_broadcast",
 }
 
 // excludedTools is the recorded denylist of the §6.1 "Deliberately NOT tools" set.
@@ -49,6 +51,9 @@ var excludedTools = []string{
 	"keystore_change_passphrase",
 	// network mutations
 	"network_add", "network_use", "network_remove",
+	// PSBT operator/plumbing verbs (psbt_create is the front half of a spend — an agent
+	// blind-sign vector; combine/finalize/extract are pure plumbing)
+	"psbt_create", "psbt_combine", "psbt_finalize", "psbt_extract",
 	// self-referential / shell-only
 	"mcp_serve", "mcp_tools", "version", "completion", "config",
 }

@@ -163,6 +163,19 @@ const (
 	CodeMessageRequired = "usage.message_required" //nolint:gosec // G101: dotted error-code string, not a credential
 	CodeBadSignature    = "usage.bad_signature"    //nolint:gosec // G101: dotted error-code string, not a credential
 
+	// PSBT (BIP-174) input/state codes. A missing PSBT input, an undecodable PSBT,
+	// a sign of a PSBT with no wallet-owned inputs, a finalize/extract on an
+	// incomplete (missing co-signer sig) PSBT, and a combine of PSBTs that do not
+	// share the same unsigned tx — all usage-class (exit 2). They live on the
+	// existing usage/exit-2 lane: a malformed request, not an auth/state/seal
+	// failure. The policy chokepoint in PSBTSign reuses the policy.denied.* /
+	// seal codes verbatim (exit 3/7/8).
+	CodePSBTRequired        = "usage.psbt_required"   //nolint:gosec // G101: dotted error-code string, not a credential
+	CodeBadPSBT             = "usage.bad_psbt"        //nolint:gosec // G101: dotted error-code string, not a credential
+	CodePSBTNotOwned        = "psbt.not_owned"        // a sign found no wallet-owned inputs (exit 2)
+	CodePSBTIncomplete      = "psbt.incomplete"       // finalize/extract on an unfinalized PSBT (exit 2)
+	CodePSBTCombineMismatch = "psbt.combine_mismatch" // combine of differing unsigned txs (exit 2)
+
 	// CodeNetworkRequired is raised when a network-specific op runs with no network
 	// resolved (--network > DAXIB_NETWORK > config defaults.network all empty). It is
 	// a usage failure (exit 2): the operator must SELECT a network — daxib never
@@ -219,6 +232,18 @@ var codeExit = map[string]ExitCode{
 	// a successful verify with valid=false, exit 0.)
 	"usage.message_required": ExitUsage,
 	"usage.bad_signature":    ExitUsage,
+	// PSBT (BIP-174) input/state failures (exit 2): a missing PSBT input, an
+	// undecodable PSBT envelope, a sign of a PSBT this wallet owns no inputs of, a
+	// finalize/extract on an incomplete (missing co-signer sig) PSBT, and a combine
+	// of PSBTs that do not share an identical unsigned tx. All USAGE-class — a
+	// malformed request, never an auth/state/seal failure. (The policy chokepoint in
+	// `psbt sign` reuses policy.denied.*/seal codes, which already map to exit
+	// 3/7/8.)
+	"usage.psbt_required":   ExitUsage,
+	"usage.bad_psbt":        ExitUsage,
+	"psbt.not_owned":        ExitUsage,
+	"psbt.incomplete":       ExitUsage,
+	"psbt.combine_mismatch": ExitUsage,
 	// No network resolved (--network / DAXIB_NETWORK / config defaults.network all
 	// empty) for a network-specific op — the operator must select one; daxib never
 	// silently defaults (exit 2).

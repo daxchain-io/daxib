@@ -186,6 +186,36 @@ linters:
             - pkg: github.com/btcsuite/btcd/mempool
               desc: "bip322 must not import btcd/mempool (offline-safe CGO0+windows build)"
 
+        # ── psbt is a pure provider leaf: domain + stdlib + btcd primitives ONLY ──
+        # The BIP-174 serialization/mechanics layer over btcutil/psbt. It holds NO keys
+        # and makes NO policy decision (the service drives ownership + the policy
+        # reservation + the keystore signer), so it never imports the core, a frontend,
+        # OR another daxib provider (keys/backend/policy/coinselect). It must stay
+        # offline-safe: no btcd/blockchain or btcd/mempool (which drag the chainstate
+        # tree in and threaten the CGO0+windows build).
+        psbt:
+          files:
+            - "**/internal/psbt/**"
+          deny:
+            - pkg: github.com/daxchain-io/daxib/internal/service
+              desc: "psbt is a provider leaf — never the core"
+            - pkg: github.com/daxchain-io/daxib/internal/cli
+              desc: "psbt is a provider leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/mcpserver
+              desc: "psbt is a provider leaf — never a frontend"
+            - pkg: github.com/daxchain-io/daxib/internal/keys
+              desc: "psbt holds no keys — the service supplies the signed witness to attach"
+            - pkg: github.com/daxchain-io/daxib/internal/policy
+              desc: "psbt makes no policy decision — the service runs eng.Reserve"
+            - pkg: github.com/daxchain-io/daxib/internal/backend
+              desc: "psbt is offline — the service re-verifies values against the backend"
+            - pkg: github.com/daxchain-io/daxib/internal/coinselect
+              desc: "psbt is a serialization leaf — the service drives coin selection"
+            - pkg: github.com/btcsuite/btcd/blockchain
+              desc: "psbt must not import btcd/blockchain (offline-safe CGO0+windows build)"
+            - pkg: github.com/btcsuite/btcd/mempool
+              desc: "psbt must not import btcd/mempool (offline-safe CGO0+windows build)"
+
         # ── policy is a state provider leaf: domain + policyseal + fsx + secret ──
         # It never imports the core (service), a frontend, OR the journal (service
         # drives orphan reconciliation across the policy/journal seam).

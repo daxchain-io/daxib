@@ -64,6 +64,7 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newBalanceCmd(ctx, rs),  // M3: UTXO-derived balance
 		newUTXOCmd(ctx, rs),     // M3: utxo list
 		newTxCmd(ctx, rs),       // M4: tx send/status/wait/list (the send pipeline)
+		newPsbtCmd(ctx, rs),     // PSBT (BIP-174): create/sign/combine/finalize/extract/broadcast/decode
 		newFeeCmd(ctx, rs),      // M4: fee estimates + recommendation
 		newPolicyCmd(ctx, rs),   // M5: sealed spend-limit guardrails
 		newMcpCmd(ctx, rs),      // M6: the MCP server (Frontend 2) + tool introspection

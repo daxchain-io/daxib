@@ -71,6 +71,18 @@ const descTxCancel = "Cancel an unconfirmed, RBF-signaling send by replacing it 
 // passphrase arrives out-of-band (the env channel), never as a tool argument.
 const descSignMessage = "Sign an arbitrary message with a wallet address's key (Bitcoin BIP-322 'simple', for proving address ownership — NOT a fund movement). 'ref' is a bech32 address or a 'wallet/branch/index' derivation ref; 'message' is the text to sign. Unlocking the key needs the keystore passphrase, which is supplied to the server out-of-band (never a tool argument). Returns the signing address and the base64 BIP-322 witness signature. Signs nothing on-chain and moves no funds."
 
+// ── PSBT (BIP-174) ────────────────────────────────────────────────────────────
+
+// descPSBTDecode is read-only inspection.
+const descPSBTDecode = "Inspect a Partially-Signed Bitcoin Transaction (BIP-174): its inputs (outpoint, value, which are MINE, which are signed), outputs (address, value, which are mine/change), total fee, fee-rate, vsize, and whether it is complete (every input finalized). Pass the base64 'psbt'. Read-only — touches no keystore and signs nothing."
+
+// descPSBTSign carries the policy-checked guarantee — it is the PSBT analog of
+// send (it unlocks a key AND authorizes a spend via the policy reservation).
+const descPSBTSign = "Sign this wallet's owned inputs of a PSBT (BIP-174). Detects owned inputs by script match (never a counterparty-supplied derivation), re-verifies their values against the backend, then POLICY-CHECKS the wallet's NET outflow (per-tx limit, rolling-24h limit, fee-rate cap, destination allowlist) BEFORE attaching any signature — a denied or over-limit sign produces NO signature. The keystore passphrase is supplied to the server out-of-band (never a tool argument). Returns the updated base64 'psbt' (NOT finalized — co-signers can still add signatures). This is policy-gated identically to send: an agent cannot raise its own limits through it."
+
+// descPSBTBroadcast moves bytes onto the wire; its policy charge happened at sign.
+const descPSBTBroadcast = "Finalize, extract, and BROADCAST a PSBT (BIP-174) onto the network. The spend was already policy-checked and reserved at sign time (this verb commits that reservation, cross-linked by txid — it does not re-charge the policy). Pass the base64 'psbt'; an incomplete PSBT (missing co-signer signatures) is a clean error. Waits for confirmation by default over MCP. Returns the broadcast txid and lifecycle status."
+
 // descVerify is passphrase-free and pure (no keystore, no backend).
 const descVerify = "Verify a Bitcoin BIP-322 'simple' message signature against an address (passphrase-free, no signing). 'address', 'message', and the base64 'signature' fully determine the result. A signature that decodes but does NOT match is NOT an error — it returns valid:false (branch on the field); only a malformed address or undecodable signature is an error. Read-only."
 
