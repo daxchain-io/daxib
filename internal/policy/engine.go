@@ -334,6 +334,19 @@ func (e *Engine) Reserve(ctx context.Context, req Check) (Reservation, error) {
 	return res, nil
 }
 
+// AdoptReservation rebuilds a Reservation handle for an EXISTING durable
+// reservation id on a network, so a later, separate process (e.g. `psbt broadcast`
+// committing a reservation `psbt sign` took earlier and cross-linked via the
+// journal) can Commit/Release it. The handle's transitions go through the same
+// per-network-locked counter path; an unknown/pruned id makes Commit/Release a
+// harmless no-op (transition is idempotent). An empty id returns a no-op handle.
+func (e *Engine) AdoptReservation(id, network string) Reservation {
+	if id == "" {
+		return Reservation{engine: e, noop: true}
+	}
+	return Reservation{id: id, network: network, engine: e}
+}
+
 // Commit promotes a reservation reserved→committed (broadcast accepted). Idempotent;
 // a no-op reservation does nothing. The txid is recorded for audit.
 func (r Reservation) Commit(ctx context.Context, txid string) error {

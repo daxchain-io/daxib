@@ -88,34 +88,55 @@ func (s *Service) chainParams() *chaincfg.Params {
 // Evaluate elsewhere, writing no reservation).
 type reserveFn func(ctx context.Context, art sendArtifact) error
 
-func (s *Service) buildAndSign(ctx context.Context, wallet string, client interface {
+// unsignedBuild is the product of buildUnsigned: the fully-built UNSIGNED tx plus
+// everything the reserve/sign tail (real send) AND `psbt create` need. It is the
+// front half of buildAndSign, factored out so both paths share identical coin-
+// select + change + fee math. It holds NO signature.
+type unsignedBuild struct {
+	tx         *wire.MsgTx             // the unsigned v2/RBF tx (recipient out, then change)
+	specs      []keys.InputSigningSpec // per-owned-input signing coords + prevout (script+value)
+	sel        coinselect.Result       // the selection (fee/vsize/change)
+	inAddr     map[string]string       // outpoint -> address (for the journal)
+	recipient  string                  // req.To (the recipient address)
+	recipSat   int64                   // recipient value
+	changeAddr string                  // wallet-owned change address ("" when folded to fee)
+	changeIdx  int                     // the change output's index in tx ( -1 when none)
+}
+
+// buildUnsigned is the front half of buildAndSign (steps 1-6: validate, ScanAddresses
+// + byAddr, gather/filter confirmed UTXOs, coinselect.Select, change allocation,
+// build the unsigned v2/RBF wire.MsgTx + per-input specs). It signs NOTHING and takes
+// NO reservation — the reserve/sign tail (real send) and `psbt create` (PSBT
+// serialization) both consume its output. dryRun PEEKs the change address (no
+// watermark advance); a real build DeriveNext's it.
+func (s *Service) buildUnsigned(ctx context.Context, wallet string, client interface {
 	UTXOs(ctx context.Context, addrs []string) ([]domain.UTXO, error)
-}, req domain.SendRequest, feeRate int64, dryRun bool, consumed map[string]bool, reserve reserveFn) (sendArtifact, error) {
+}, req domain.SendRequest, feeRate int64, dryRun bool, consumed map[string]bool) (unsignedBuild, error) {
 	params := s.chainParams()
 
 	// 1. Parse + validate the amount and the destination address.
 	amountSat, err := domain.ParseAmountToSats(req.Amount)
 	if err != nil {
-		return sendArtifact{}, err
+		return unsignedBuild{}, err
 	}
 	if amountSat <= 0 {
-		return sendArtifact{}, domain.Newf(domain.CodeUsageBadAmount, "send amount must be positive, got %q", req.Amount)
+		return unsignedBuild{}, domain.Newf(domain.CodeUsageBadAmount, "send amount must be positive, got %q", req.Amount)
 	}
 	toAddr, err := btcutil.DecodeAddress(req.To, params)
 	if err != nil || !toAddr.IsForNet(params) {
-		return sendArtifact{}, domain.Newf(domain.CodeUsageBadAddress,
+		return unsignedBuild{}, domain.Newf(domain.CodeUsageBadAddress,
 			"--to %q is not a valid %s address", req.To, s.net)
 	}
 	recipientScript, err := txscript.PayToAddrScript(toAddr)
 	if err != nil {
-		return sendArtifact{}, domain.Newf(domain.CodeUsageBadAddress, "--to %q cannot be paid to: %v", req.To, err)
+		return unsignedBuild{}, domain.Newf(domain.CodeUsageBadAddress, "--to %q cannot be paid to: %v", req.To, err)
 	}
 
 	// 2. Derive the wallet's gap-window address set and index it by address so a
 	// selected UTXO maps to its (branch, index) for signing.
 	_, scan, err := s.keys.ScanAddresses(ctx, wallet, s.net, gapWindow)
 	if err != nil {
-		return sendArtifact{}, err
+		return unsignedBuild{}, err
 	}
 	type coords struct {
 		branch domain.Branch
@@ -131,7 +152,7 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 	// 3. Gather UTXOs; keep only CONFIRMED ones for selection (the default policy).
 	utxos, err := client.UTXOs(ctx, addrs)
 	if err != nil {
-		return sendArtifact{}, err
+		return unsignedBuild{}, err
 	}
 	var confirmedTotal, unconfirmedTotal int64
 	candidates := make([]coinselect.Coin, 0, len(utxos))
@@ -176,13 +197,13 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 		// If only UNCONFIRMED funds would have covered it, surface the
 		// confirmed-specific code so the agent knows to wait, not give up.
 		if isInsufficient(err) && confirmedTotal+unconfirmedTotal >= amountSat && unconfirmedTotal > 0 {
-			return sendArtifact{}, domain.WithData(
+			return unsignedBuild{}, domain.WithData(
 				domain.Newf("funds.insufficient_confirmed",
 					"insufficient CONFIRMED funds: %d sat confirmed, %d sat unconfirmed (excluded); wait for confirmations or lower the amount",
 					confirmedTotal, unconfirmedTotal),
 				map[string]any{"confirmed_sat": confirmedTotal, "unconfirmed_sat": unconfirmedTotal, "target_sat": amountSat})
 		}
-		return sendArtifact{}, err
+		return unsignedBuild{}, err
 	}
 
 	// 5. Allocate a change address (a wallet-owned internal/change address) only when
@@ -201,16 +222,16 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 			da, derr = s.keys.DeriveNext(ctx, wallet, s.net, domain.BranchChange)
 		}
 		if derr != nil {
-			return sendArtifact{}, derr
+			return unsignedBuild{}, derr
 		}
 		changeAddr = da.Address
 		ca, cerr := btcutil.DecodeAddress(changeAddr, params)
 		if cerr != nil {
-			return sendArtifact{}, domain.Wrap(domain.CodeStateCorrupt, "decoding change address", cerr)
+			return unsignedBuild{}, domain.Wrap(domain.CodeStateCorrupt, "decoding change address", cerr)
 		}
 		changeScript, cerr = txscript.PayToAddrScript(ca)
 		if cerr != nil {
-			return sendArtifact{}, domain.Wrap(domain.CodeStateCorrupt, "building change script", cerr)
+			return unsignedBuild{}, domain.Wrap(domain.CodeStateCorrupt, "building change script", cerr)
 		}
 	}
 
@@ -222,7 +243,7 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 		u := utxoByOutpoint[c.Outpoint]
 		h, herr := chainhash.NewHashFromStr(u.Txid)
 		if herr != nil {
-			return sendArtifact{}, domain.Wrap(domain.CodeStateCorrupt, "parsing input txid", herr)
+			return unsignedBuild{}, domain.Wrap(domain.CodeStateCorrupt, "parsing input txid", herr)
 		}
 		txin := wire.NewTxIn(wire.NewOutPoint(h, u.Vout), nil, nil)
 		txin.Sequence = rbfSequence
@@ -230,7 +251,7 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 
 		prevScript, perr := scriptForAddress(u.Address, params)
 		if perr != nil {
-			return sendArtifact{}, perr
+			return unsignedBuild{}, perr
 		}
 		specs = append(specs, keys.InputSigningSpec{
 			Index:      i,
@@ -244,9 +265,37 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 	// Recipient output, then change (if any). BIP-69 sorting is optional; we keep a
 	// stable order (recipient first) and the change output identifiable by address.
 	tx.AddTxOut(wire.NewTxOut(amountSat, recipientScript))
+	changeIdx := -1
 	if sel.HasChange {
+		changeIdx = len(tx.TxOut)
 		tx.AddTxOut(wire.NewTxOut(sel.ChangeSat, changeScript))
 	}
+
+	return unsignedBuild{
+		tx:         tx,
+		specs:      specs,
+		sel:        sel,
+		inAddr:     inAddr,
+		recipient:  req.To,
+		recipSat:   amountSat,
+		changeAddr: changeAddr,
+		changeIdx:  changeIdx,
+	}, nil
+}
+
+// buildAndSign is the full send build: it runs buildUnsigned, then the EXISTING
+// reserve+sign tail (the §2.7/§5.1 policy chokepoint, the keystore sign, the
+// serialize + relay-safety guard) with ZERO behavior change. The split exists so
+// `psbt create` can share the build half without the sign tail.
+func (s *Service) buildAndSign(ctx context.Context, wallet string, client interface {
+	UTXOs(ctx context.Context, addrs []string) ([]domain.UTXO, error)
+}, req domain.SendRequest, feeRate int64, dryRun bool, consumed map[string]bool, reserve reserveFn) (sendArtifact, error) {
+	b, err := s.buildUnsigned(ctx, wallet, client, req, feeRate, dryRun, consumed)
+	if err != nil {
+		return sendArtifact{}, err
+	}
+	tx := b.tx
+	sel := b.sel
 
 	// 6b. POLICY CHOKEPOINT (§2.7/§5.1): the tx is fully BUILT (recipient, amount,
 	// fee, fee-rate, change all known) but NOT yet signed. Reserve the spend HERE —
@@ -258,10 +307,10 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 			feeSat:     sel.FeeSat,
 			feeRate:    feeRate,
 			vsize:      sel.VSizeVB,
-			recipient:  req.To,
-			recipSat:   amountSat,
+			recipient:  b.recipient,
+			recipSat:   b.recipSat,
 			changeSat:  sel.ChangeSat,
-			changeAddr: changeAddr,
+			changeAddr: b.changeAddr,
 		}
 		if rerr := reserve(ctx, preArt); rerr != nil {
 			return sendArtifact{}, rerr
@@ -275,7 +324,7 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 		return sendArtifact{}, perr
 	}
 	defer pass.Zero()
-	if err := s.keys.SignInputs(ctx, wallet, s.net, pass, tx, specs); err != nil {
+	if err := s.keys.SignInputs(ctx, wallet, s.net, pass, tx, b.specs); err != nil {
 		return sendArtifact{}, err
 	}
 
@@ -308,11 +357,11 @@ func (s *Service) buildAndSign(ctx context.Context, wallet string, client interf
 		feeRate:    feeRate,
 		vsize:      sel.VSizeVB,
 		inputs:     sel.Inputs,
-		inAddr:     inAddr,
-		recipient:  req.To,
-		recipSat:   amountSat,
+		inAddr:     b.inAddr,
+		recipient:  b.recipient,
+		recipSat:   b.recipSat,
 		changeSat:  sel.ChangeSat,
-		changeAddr: changeAddr,
+		changeAddr: b.changeAddr,
 	}
 	return art, nil
 }

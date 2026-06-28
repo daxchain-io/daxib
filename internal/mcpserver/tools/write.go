@@ -164,3 +164,48 @@ func addSignMessage(srv *mcp.Server, name, desc string, fn signMessageFn) {
 			return nil, &out, nil
 		})
 }
+
+// psbtSignFn is the PSBT-sign shape: (ctx, PSBTSignRequest, PSBTSignInput) →
+// (PSBTResult, error). Like send it unlocks a key AND authorizes a spend (it runs
+// eng.Reserve INSIDE the service method before any byte is signed), so it is the
+// PSBT analog of send: this package cannot import policy/keys, so it cannot skip the
+// check. The keystore passphrase resolves from the out-of-band env channel (the
+// input's passphrase channels left zero), EXACTLY like sign_message; Yes is
+// constant-true (the §6.4 confirmation ceremony cannot exist over a tool call — NOT
+// a policy waiver).
+type psbtSignFn func(context.Context, domain.PSBTSignRequest, service.PSBTSignInput) (domain.PSBTResult, error)
+
+func addPSBTSign(srv *mcp.Server, name, desc string, fn psbtSignFn) {
+	mcp.AddTool(srv, withSchemas[domain.PSBTSignRequest, domain.PSBTResult](signToolDef(name, desc)),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in domain.PSBTSignRequest) (*mcp.CallToolResult, *domain.PSBTResult, error) {
+			in.Yes = true // §6.4 ceremony: the TTY confirmation cannot exist over a tool call
+			out, err := fn(ctx, in, service.PSBTSignInput{})
+			if err != nil {
+				return nil, nil, toolError(err)
+			}
+			return nil, &out, nil
+		})
+}
+
+// psbtBroadcastFn is the PSBT-broadcast shape: (ctx, PSBTBroadcastRequest,
+// EventSink) → (TxResult, error). It moves bytes onto the wire (the policy charge
+// already happened at sign; this commits the cross-linked reservation). The §6.4
+// ceremony applies (Yes constant-true, Wait default-on); a tx.wait_timeout
+// dual-signals (IsError + Out).
+type psbtBroadcastFn func(context.Context, domain.PSBTBroadcastRequest, domain.EventSink) (domain.TxResult, error)
+
+func addPSBTBroadcast(srv *mcp.Server, name, desc string, fn psbtBroadcastFn) {
+	mcp.AddTool(srv, withSchemas[domain.PSBTBroadcastRequest, domain.TxResult](writeToolDef(name, desc)),
+		func(ctx context.Context, req *mcp.CallToolRequest, in domain.PSBTBroadcastRequest) (*mcp.CallToolResult, *domain.TxResult, error) {
+			in.Yes = true
+			in.Wait.Enabled = true
+			out, err := fn(ctx, in, progressSink(ctx, req))
+			if dualSignal(err) {
+				return dualResult(err), &out, nil
+			}
+			if err != nil {
+				return nil, nil, toolError(err)
+			}
+			return nil, &out, nil
+		})
+}

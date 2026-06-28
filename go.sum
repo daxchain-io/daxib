@@ -6,12 +6,14 @@ github.com/btcsuite/btcd/btcec/v2 v2.5.0 h1:KioMXOWa76b86sTZZOmbzv/ldaQCmB8KFAyn
 github.com/btcsuite/btcd/btcec/v2 v2.5.0/go.mod h1:+K/MYXcLBtHEQjRbjHuJChuybk4LCgjdjgRwil+e+Kk=
 github.com/btcsuite/btcd/btcutil v1.2.0 h1:p3+S2g3Q+7G5NOh4Ji+2UrBOrg5Z0Q4ykzShWG1Dhgs=
 github.com/btcsuite/btcd/btcutil v1.2.0/go.mod h1:/Taflm113pYjUpbWKKQEfa6XOtI/+WS8awxeMZpY75k=
+github.com/btcsuite/btcd/btcutil/psbt v1.2.0 h1:w13gMXPVs9CCIAv/TCn/TBBHKxU4ywx5wjywwN08ORs=
+github.com/btcsuite/btcd/btcutil/psbt v1.2.0/go.mod h1:wpG6BuIKYtMHPmqVnEcmKdciLc1qe6Pl3MKD6OoBBTY=
 github.com/btcsuite/btcd/chaincfg/chainhash v1.2.0 h1:yMIg99+4aBvqfl/HzJRKfxTX9rGfikoI9uvFzterhc8=
 github.com/btcsuite/btcd/chaincfg/chainhash v1.2.0/go.mod h1:Y72Ren9gfhlEvnwnT78BGcSNO2UMphTKLn9AorF+5rg=
 github.com/btcsuite/btcd/chainhash/v2 v2.0.0 h1:PMLlSloHJuEeB80XG9EjpXWNEKAZAMLl6YHZ6YsEuoA=
 github.com/btcsuite/btcd/chainhash/v2 v2.0.0/go.mod h1:mKxcZ7oGTXE7IRV+sS9hP4EVBwc/SzfNR+52IsOP9j8=
-github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f h1:bAs4lUbRJpnnkd9VhRV3jjAVU7DJVjMaK+IsvSeZvFo=
-github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufoqS23FtqVCzL0ZqgP5MqXbb4fg/WgDys70nA=
+github.com/btcsuite/btclog v1.0.0 h1:sEkpKJMmfGiyZjADwEIgB1NSwMyfdD1FB8v6+w1T0Ns=
+github.com/btcsuite/btclog v1.0.0/go.mod h1:w7xnGOhwT3lmrS4H3b/D1XAXxvh+tbhUm8xeHN2y3TQ=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

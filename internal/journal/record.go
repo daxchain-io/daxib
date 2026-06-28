@@ -114,6 +114,14 @@ type Record struct {
 	// 1, schema-stable), and a shallow clone/fold copies the strings safely.
 	ReplacesID   string `json:"replaces_id,omitempty"`
 	ReplacedByID string `json:"replaced_by_id,omitempty"`
+	// PSBTBase64 carries the partial (signed-but-not-broadcast) PSBT for a record
+	// written by `psbt sign`. A `psbt sign` does NOT produce broadcastable raw bytes
+	// (RawTx stays empty — the PSBT may still need a co-signer), so the durable
+	// artifact is the base64 PSBT here, cross-linked to the spend reservation via
+	// ReservationID. Omitted (and zero) on every send/RBF record (schema-stable;
+	// recordVersion stays 1). `psbt broadcast` recovers the reservation by the
+	// unsigned-tx txid and commits it on accept.
+	PSBTBase64 string `json:"psbt_base64,omitempty"`
 }
 
 // recordVersion is the current schema version stamped into Record.V on append.

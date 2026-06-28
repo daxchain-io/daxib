@@ -584,6 +584,432 @@
     }
   },
   {
+    "name": "psbt_broadcast",
+    "description": "Finalize, extract, and BROADCAST a PSBT (BIP-174) onto the network. The spend was already policy-checked and reserved at sign time (this verb commits that reservation, cross-linked by txid — it does not re-charge the policy). Pass the base64 'psbt'; an incomplete PSBT (missing co-signer signatures) is a clean error. Waits for confirmation by default over MCP. Returns the broadcast txid and lifecycle status.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "psbt": {
+          "description": "the base64-encoded PSBT to finalize+extract+broadcast",
+          "type": "string"
+        },
+        "wallet": {
+          "description": "wallet that owns the PSBT (optional; default wallet)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "psbt"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_btc": {
+          "type": "string"
+        },
+        "amount_sat": {
+          "type": "integer"
+        },
+        "block_height": {
+          "type": "integer"
+        },
+        "change_address": {
+          "type": "string"
+        },
+        "change_btc": {
+          "type": "string"
+        },
+        "change_sat": {
+          "type": "integer"
+        },
+        "confirmations": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "address",
+              "value_sat"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "raw_tx_hex": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "boolean"
+        },
+        "replaces_txid": {
+          "type": "string"
+        },
+        "resume": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "wallet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "to",
+        "amount_sat",
+        "amount_btc",
+        "fee_sat",
+        "fee_btc",
+        "fee_rate",
+        "vsize",
+        "status"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true
+    }
+  },
+  {
+    "name": "psbt_decode",
+    "description": "Inspect a Partially-Signed Bitcoin Transaction (BIP-174): its inputs (outpoint, value, which are MINE, which are signed), outputs (address, value, which are mine/change), total fee, fee-rate, vsize, and whether it is complete (every input finalized). Pass the base64 'psbt'. Read-only — touches no keystore and signs nothing.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "psbt": {
+          "description": "the base64-encoded PSBT to decode and inspect",
+          "type": "string"
+        },
+        "wallet": {
+          "description": "wallet to annotate which inputs/outputs are mine (optional; default wallet)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "psbt"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate_sat_vb": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "mine": {
+                "type": "boolean"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "signed": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "value_sat",
+              "mine",
+              "signed"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "mine": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "value_sat",
+              "mine"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "psbt": {
+          "type": "string"
+        },
+        "raw_tx": {
+          "type": "string"
+        },
+        "signed_by_us": {
+          "type": "integer"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "complete",
+        "signed_by_us"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "psbt_sign",
+    "description": "Sign this wallet's owned inputs of a PSBT (BIP-174). Detects owned inputs by script match (never a counterparty-supplied derivation), re-verifies their values against the backend, then POLICY-CHECKS the wallet's NET outflow (per-tx limit, rolling-24h limit, fee-rate cap, destination allowlist) BEFORE attaching any signature — a denied or over-limit sign produces NO signature. The keystore passphrase is supplied to the server out-of-band (never a tool argument). Returns the updated base64 'psbt' (NOT finalized — co-signers can still add signatures). This is policy-gated identically to send: an agent cannot raise its own limits through it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "psbt": {
+          "description": "the base64-encoded PSBT (BIP-174) to sign",
+          "type": "string"
+        },
+        "wallet": {
+          "description": "wallet whose owned inputs to sign (optional; default wallet)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "psbt"
+      ],
+      "type": "object"
+    },
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "fee_btc": {
+          "type": "string"
+        },
+        "fee_rate_sat_vb": {
+          "type": "integer"
+        },
+        "fee_sat": {
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "mine": {
+                "type": "boolean"
+              },
+              "outpoint": {
+                "type": "string"
+              },
+              "signed": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outpoint",
+              "value_sat",
+              "mine",
+              "signed"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "network": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "change": {
+                "type": "boolean"
+              },
+              "mine": {
+                "type": "boolean"
+              },
+              "value_sat": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "value_sat",
+              "mine"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "psbt": {
+          "type": "string"
+        },
+        "raw_tx": {
+          "type": "string"
+        },
+        "signed_by_us": {
+          "type": "integer"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "vsize": {
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "complete",
+        "signed_by_us"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false
+    }
+  },
+  {
     "name": "send",
     "description": "Sign and broadcast a Bitcoin transfer. Coin-selects from the wallet's confirmed UTXOs, then POLICY-CHECKS the spend (per-tx limit, rolling-24h limit, fee-rate cap, destination allowlist) BEFORE a single byte is signed — a denied or over-limit send produces no signature and moves no funds. 'to' is a Bitcoin address for the active network; 'amount' is a decimal BTC string or an integer-sat string (never a float you computed); 'fee_rate' (sat/vByte) overrides the 'speed' tier. Set 'dry_run':true to preview without broadcasting. Waits for confirmation by default over MCP. Returns the txid, fee, and lifecycle status.",
     "inputSchema": {

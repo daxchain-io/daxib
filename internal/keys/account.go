@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/btcsuite/btcd/btcutil/hdkeychain"
+
 	"github.com/daxchain-io/daxib/internal/domain"
 )
 
@@ -249,6 +251,82 @@ func (s *Store) AddressAt(ctx context.Context, walletName string, net domain.Net
 		Address: addr,
 		Path:    fullPath(net, branch, index),
 	}, nil
+}
+
+// PubKeyInfo is the passphrase-free derivation hint for one address: its
+// compressed public key, the full BIP-84 leaf path string, the path as BIP-32
+// child indices (hardened bits set), and a stable master-key fingerprint.
+type PubKeyInfo struct {
+	PubKey      []byte   // compressed pubkey (33 bytes)
+	Path        string   // "m/84'/coin'/0'/branch/index"
+	PathIndices []uint32 // [84', coin', 0', branch, index] with hardened bits set
+	Fingerprint uint32   // a stable master-key fingerprint (see note below)
+}
+
+// PubKeyAt derives — read-only, NO passphrase — the compressed public key, the
+// BIP-84 path, and a master-key fingerprint for (wallet, branch, index) on the
+// active network, from the stored neutered account xpub (the same ECPubKey()
+// derivation addressFromAccountXpub uses). It is used by `psbt create` to attach
+// the BIP-32 derivation hint to each input/change output, and by `psbt sign` to
+// label the PartialSig pubkey.
+//
+// Fingerprint note: daxib stores ONLY the neutered ACCOUNT xpub (m/84'/coin'/0'),
+// never the master key, so the TRUE BIP-32 master fingerprint cannot be recovered
+// without the seed. We use the account xpub's ParentFingerprint (the fingerprint of
+// the coin node m/84'/coin') as a STABLE, deterministic, passphrase-free
+// fingerprint. It is consistent across `psbt create` (hint) and `psbt sign`
+// (label), and daxib's ownership decision is by SCRIPT match (never by this
+// fingerprint), so its exact BIP-32-master value is not load-bearing — only its
+// stability is.
+func (s *Store) PubKeyAt(ctx context.Context, walletName string, net domain.Network, branch domain.Branch, index uint32) (PubKeyInfo, error) {
+	meta, err := s.loadMeta()
+	if err != nil {
+		return PubKeyInfo{}, err
+	}
+	_, _, chain, cerr := meta.walletChain(walletName, net)
+	if cerr != nil {
+		return PubKeyInfo{}, cerr
+	}
+	acct, err := hdkeychain.NewKeyFromString(chain.AccountXpub)
+	if err != nil {
+		return PubKeyInfo{}, errWrap(CodeStateCorrupt, "parsing account xpub", err)
+	}
+	defer acct.Zero()
+	fingerprint := acct.ParentFingerprint()
+
+	branchKey, err := acct.Derive(uint32(branch))
+	if err != nil {
+		return PubKeyInfo{}, errWrap(CodeStateCorrupt, "deriving branch node", err)
+	}
+	defer branchKey.Zero()
+	leaf, err := branchKey.Derive(index)
+	if err != nil {
+		return PubKeyInfo{}, errWrap(CodeStateCorrupt, "deriving address node", err)
+	}
+	defer leaf.Zero()
+	pub, err := leaf.ECPubKey()
+	if err != nil {
+		return PubKeyInfo{}, errWrap(CodeStateCorrupt, "extracting public key", err)
+	}
+	return PubKeyInfo{
+		PubKey:      pub.SerializeCompressed(),
+		Path:        fullPath(net, branch, index),
+		PathIndices: bip84PathIndices(net, branch, index),
+		Fingerprint: fingerprint,
+	}, nil
+}
+
+// bip84PathIndices returns the BIP-84 leaf path as BIP-32 child indices, with the
+// hardened bit set on the first three (purpose/coin/account): [84', coin', 0',
+// branch, index].
+func bip84PathIndices(net domain.Network, branch domain.Branch, index uint32) []uint32 {
+	return []uint32{
+		hdHardened + purposeBIP84,
+		hdHardened + net.CoinType(),
+		hdHardened + 0,
+		uint32(branch),
+		index,
+	}
 }
 
 // DefaultWallet returns the keystore's default wallet name (meta default_wallet),

@@ -49,6 +49,19 @@ type InputSigningSpec struct {
 // wallet.not_found (exit 10). A spec.Index out of range or a derivation failure
 // is state.corrupt.
 func (s *Store) SignInputs(ctx context.Context, walletName string, net domain.Network, pass *secret.Bytes, tx *wire.MsgTx, specs []InputSigningSpec) error {
+	return s.SignInputsWithPrevouts(ctx, walletName, net, pass, tx, specs, nil)
+}
+
+// SignInputsWithPrevouts is SignInputs plus an explicit prevout map covering
+// inputs the wallet does NOT sign (a co-signer's FOREIGN inputs in a partially-
+// owned PSBT). It signs only the named specs but seeds the BIP-143 sighash
+// machinery with EVERY input's prevout, because txscript.NewTxSigHashes
+// pre-computes the segwit sighash midstate over ALL inputs and dereferences each
+// prevout's PkScript (e.g. for the taproot check); a missing foreign prevout would
+// nil-panic there. extraPrevouts maps a tx outpoint -> its prevout (script+value);
+// the spec'd (owned) prevouts always take precedence. Pass nil extraPrevouts for
+// the all-owned send path (identical to SignInputs).
+func (s *Store) SignInputsWithPrevouts(ctx context.Context, walletName string, net domain.Network, pass *secret.Bytes, tx *wire.MsgTx, specs []InputSigningSpec, extraPrevouts map[wire.OutPoint]*wire.TxOut) error {
 	if tx == nil {
 		return errKeys(CodeStateCorrupt, "nil transaction in SignInputs")
 	}
@@ -87,8 +100,16 @@ func (s *Store) SignInputs(ctx context.Context, walletName string, net domain.Ne
 	}
 	defer account.Zero()
 
-	// Build the BIP-143 sighash machinery over the prevouts.
-	prevOuts := make(map[wire.OutPoint]*wire.TxOut, len(specs))
+	// Build the BIP-143 sighash machinery over the prevouts. Seed the fetcher with
+	// EVERY input's prevout: the owned (spec'd) inputs first (authoritative), then
+	// any caller-supplied foreign prevouts. NewTxSigHashes iterates all inputs, so a
+	// foreign input absent from the fetcher would nil-panic.
+	prevOuts := make(map[wire.OutPoint]*wire.TxOut, len(tx.TxIn))
+	for op, out := range extraPrevouts {
+		if out != nil {
+			prevOuts[op] = out
+		}
+	}
 	for _, sp := range specs {
 		if sp.Index < 0 || sp.Index >= len(tx.TxIn) {
 			return errKeysf(CodeStateCorrupt, "signing spec input index %d out of range", sp.Index)

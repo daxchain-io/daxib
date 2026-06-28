@@ -63,38 +63,46 @@ func Register(srv *mcp.Server, svc *service.Service) {
 	addPolicyShow(srv, "policy_show", descPolicyShow, svc.PolicyShow)
 	addPolicyCheck(srv, "policy_check", descPolicyCheck, svc.PolicyCheck)
 
+	// ── PSBT inspection (read-only; no keystore/backend/policy) ──────────────────
+	addReadPlain(srv, "psbt_decode", descPSBTDecode, svc.PSBTDecode)
+
 	// ── funds-moving / mutation (route through the SAME policy-bound methods) ───
 	addSend(srv, "send", descSend, svc.SendTx)                        // the one money mover (§6.4 central guarantee)
 	addSpeedup(srv, "tx_speedup", descTxSpeedup, svc.SpeedupTx)       // RBF fee-bump (policy-gated like send)
 	addCancel(srv, "tx_cancel", descTxCancel, svc.CancelTx)           // RBF cancel/void (policy-gated like send)
 	addAddressNew(srv, "address_new", descAddressNew, svc.AddressNew) // the receive affordance
 
-	// ── keystore-gated signing (unlocks a key; moves no funds) ──────────────────
-	addSignMessage(srv, "sign_message", descSignMessage, svc.MessageSign) // BIP-322 sign (env-channel passphrase)
+	// ── keystore-gated signing (unlocks a key) ──────────────────────────────────
+	addSignMessage(srv, "sign_message", descSignMessage, svc.MessageSign)         // BIP-322 sign (env-channel passphrase)
+	addPSBTSign(srv, "psbt_sign", descPSBTSign, svc.PSBTSign)                     // PSBT sign — policy-gated like send (the chokepoint)
+	addPSBTBroadcast(srv, "psbt_broadcast", descPSBTBroadcast, svc.PSBTBroadcast) // finalize+extract+broadcast (commits the sign-time reservation)
 }
 
 // ToolNames is the canonical roster of the §6.1 tools, in table order. It is the
 // tested artifact the count/exclusion test diffs against the actually-registered
 // set: Register MUST register exactly these names, no more, no fewer.
 var ToolNames = []string{
-	"balance",      // 1  read
-	"utxo_list",    // 2  read
-	"wallet_list",  // 3  read
-	"wallet_show",  // 4  read
-	"address_list", // 5  read
-	"fee",          // 6  read
-	"verify",       // 7  read (BIP-322 verify; passphrase-free, pure)
-	"convert",      // 8  read (exact sat<->BTC; pure)
-	"tx_status",    // 9  read
-	"tx_wait",      // 10 read (long-poll, dual-signal timeout)
-	"tx_list",      // 11 read
-	"policy_show",  // 12 read-only
-	"policy_check", // 13 read-only (dry-run)
-	"send",         // 14 SIGN (the one money mover)
-	"tx_speedup",   // 15 SIGN (RBF fee-bump; policy-gated like send)
-	"tx_cancel",    // 16 SIGN (RBF cancel/void; policy-gated like send)
-	"address_new",  // 17 mutation (derive next receive address; no signing)
-	"sign_message", // 18 SIGN (BIP-322 message signature; keystore-gated, moves no funds)
+	"balance",        // 1  read
+	"utxo_list",      // 2  read
+	"wallet_list",    // 3  read
+	"wallet_show",    // 4  read
+	"address_list",   // 5  read
+	"fee",            // 6  read
+	"verify",         // 7  read (BIP-322 verify; passphrase-free, pure)
+	"convert",        // 8  read (exact sat<->BTC; pure)
+	"tx_status",      // 9  read
+	"tx_wait",        // 10 read (long-poll, dual-signal timeout)
+	"tx_list",        // 11 read
+	"policy_show",    // 12 read-only
+	"policy_check",   // 13 read-only (dry-run)
+	"psbt_decode",    // 14 read-only (BIP-174 inspection)
+	"send",           // 15 SIGN (the one money mover)
+	"tx_speedup",     // 16 SIGN (RBF fee-bump; policy-gated like send)
+	"tx_cancel",      // 17 SIGN (RBF cancel/void; policy-gated like send)
+	"address_new",    // 18 mutation (derive next receive address; no signing)
+	"sign_message",   // 19 SIGN (BIP-322 message signature; keystore-gated, moves no funds)
+	"psbt_sign",      // 20 SIGN (PSBT sign — policy-gated like send; the chokepoint)
+	"psbt_broadcast", // 21 SIGN (finalize+extract+broadcast; commits the sign-time reservation)
 }
 
 // SigningTools is the canonical set of the tools that move funds — the money movers.
@@ -108,6 +116,14 @@ var SigningTools = []string{
 	"send",
 	"tx_speedup",
 	"tx_cancel",
+	// psbt_sign unlocks a key AND authorizes a spend (it runs eng.Reserve inside the
+	// service method before any byte is signed) — the PSBT analog of send.
+	// psbt_broadcast moves the signed bytes onto the wire (its policy charge happened
+	// at sign; it commits the cross-linked reservation). Both are policy-bound
+	// identically to send by routing through the SAME service methods that hold the
+	// only path to the keystore signer.
+	"psbt_sign",
+	"psbt_broadcast",
 }
 
 // ExcludedTools is the recorded, non-regressable deliberately-NOT-tools boundary
@@ -149,6 +165,16 @@ var ExcludedTools = []string{
 	"network_add",
 	"network_use",
 	"network_remove",
+	// PSBT operator/plumbing verbs — EXCLUDED from MCP in v1. psbt_create advances the
+	// change watermark and is the front half of a spend (an agent minting unsigned
+	// PSBTs a human later blind-signs is a social-engineering vector — an agent that
+	// wants to spend uses the fully end-to-end-policy-gated send). combine/finalize/
+	// extract are pure operator plumbing with no agent need in v1. (psbt_decode (read),
+	// psbt_sign (SIGN), psbt_broadcast (SIGN) ARE exposed — they are NOT in this list.)
+	"psbt_create",
+	"psbt_combine",
+	"psbt_finalize",
+	"psbt_extract",
 	// Self-referential / shell-only.
 	"mcp_serve",
 	"mcp_tools",
