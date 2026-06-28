@@ -153,12 +153,14 @@ documented exit code.
 | `receive` | wait for inbound funds — emits the address, then blocks until paid |
 | `balance` | confirmed / unconfirmed, UTXO-derived |
 | `utxo` | `list` |
-| `tx` | `send` · `status` · `wait` · `list` · `speedup` (RBF) · `cancel` (RBF) |
+| `tx` | `send` · `status` · `wait` · `list` · `speedup` (RBF) · `cancel` (RBF) · `abandon` |
 | `fee` | sat/vB estimates + a recommendation |
+| `psbt` | `create` · `sign` · `combine` · `finalize` · `extract` · `broadcast` · `decode` (BIP-174; `sign` is policy-bound) |
 | `sign` / `verify` | BIP-322 "simple" message signing for P2WPKH (`verify` is passphrase-free) |
 | `contacts` | `add` · `list` · `show` · `remove` — names resolve in `tx send --to` / `policy allow` |
 | `backend` | `add` · `list` · `use` · `test` · `remove` (Bitcoin Core RPC / Esplora) |
-| `policy` | `show` · `set` · `allow` · `deny` · `check` · `counters` · `verify` · `reset` · `pin` · `change-admin-passphrase` |
+| `policy` | `show` · `set` · `allow` · `deny` · `check` · `counters` · `verify` · `reset` · `pin` · `release` · `change-admin-passphrase` |
+| `network` | `use` · `show` · `list` (select + persist the active network) |
 | `config` | `get` · `set` · `list` (per-network default backend; the sealed `policy.*` subtree is read-only) |
 | `mcp` | `serve` · `tools` |
 | utility | `version` · `convert` (sat ⇄ BTC) · `completion` (bash/zsh/fish/powershell) |
@@ -226,20 +228,21 @@ co-sign) are on the roadmap below, not in this release.
 
 ---
 
-## Roadmap (post-`v1.0`)
+## Roadmap
 
-Deferred Bitcoin-native capabilities — documented honestly rather than overbuilt up
-front:
+The roadmap lives in GitHub issues (label
+[`roadmap`](https://github.com/daxchain-io/daxib/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap)),
+grouped by milestone:
 
-- A standalone **PSBT** noun (hardware-wallet / multi-wallet interop). *(BIP-322
-  message signing already ships — see `sign` / `verify` above.)*
-- **Runes / Ordinals / inscriptions** — hold and move Bitcoin tokens and NFTs, with
-  asset protection so coin selection never burns a rare sat as a fee.
-- **Watch-only + external PSBT signer** — no private keys on the agent host at all.
-- **Miniscript / Taproot co-sign + timelock vaults** — guardrails Bitcoin *consensus*
-  enforces, not just our software.
-- **Lightning + L402** — instant, sub-cent, machine-to-machine micropayments.
-- **CPFP**, **Silent Payments (BIP-352)**, and **BIP-353** name resolution.
+- **[v1.1](https://github.com/daxchain-io/daxib/milestone/1):** watch-only + external
+  PSBT signer · CPFP fee-bumping
+- **[v1.2](https://github.com/daxchain-io/daxib/milestone/2):** Runes / Ordinals
+  (asset-aware coin control)
+- **Backlog:** Miniscript / Taproot co-sign · Lightning + L402 · Silent Payments
+  (BIP-352) · BIP-353 name resolution
+
+PSBT (BIP-174) and BIP-322 message signing have shipped — see the command surface
+above.
 
 ---
 
@@ -251,7 +254,7 @@ front:
 | [docs/AGENTS.md](docs/AGENTS.md) | Driving daxib from an AI agent: the MCP tools, the secret env channels, the exit codes to branch on, and the safety contract |
 | [docs/SECURITY.md](docs/SECURITY.md) | The security model: the two passphrases, the sealed policy, the threat model, and the honest residual |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Paths (`~/.daxib`), environment variables, networks, and backends (incl. the `txindex=1` requirement for a Core node) |
-| [docs/PLAN.md](docs/PLAN.md) | The design artifact: the full daxie→daxib mapping, the Bitcoin-unique design, and the roadmap |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The design rationale: one-core/two-frontends, the guardrail spine, the Bitcoin-native choices, and the daxie→daxib mapping |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 See the sibling project [daxie](https://github.com/daxchain-io/daxie) for the mature

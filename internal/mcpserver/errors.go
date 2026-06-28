@@ -2,7 +2,7 @@ package mcpserver
 
 import "github.com/daxchain-io/daxib/internal/mcpserver/tools"
 
-// errors.go re-exposes the docs/PLAN.md §6.6 error-mapping helpers under the
+// errors.go re-exposes the docs/ARCHITECTURE.md §6.6 error-mapping helpers under the
 // mcpserver core package, forwarding to the SINGLE implementation in
 // mcpserver/tools (the only cycle-free direction, since mcpserver imports tools for
 // Register). There is exactly one §6.6 taxonomy projection — the lowercase impls in

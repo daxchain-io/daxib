@@ -14,7 +14,7 @@ package domain
 // Numbers 0..12 are assigned; 13..63 are reserved (never emitted); 64+ are never
 // used so daxib never collides with BSD sysexits(3) conventions.
 //
-// The table mirrors daxie's 0..12 skeleton (docs/PLAN.md §4), repurposing the
+// The table mirrors daxie's 0..12 skeleton (docs/ARCHITECTURE.md §4), repurposing the
 // EVM-specific lanes for Bitcoin: exit 5 covers coin-selection / insufficient
 // confirmed funds, exit 7 is fee-policy denial (replacing daxie's contract
 // revert), exit 9 is the double-spend / replacement conflict lane.

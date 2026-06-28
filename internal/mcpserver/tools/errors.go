@@ -5,7 +5,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// errors.go is the docs/PLAN.md §6.6 error model: ONE domain.Error taxonomy
+// errors.go is the docs/ARCHITECTURE.md §6.6 error model: ONE domain.Error taxonomy
 // projected onto MCP's tool-error mechanism. The dotted error.code an agent reads
 // is the SAME string the CLI puts in its --json error and maps to an exit code —
 // an agent branches on error.code, a shell on $?. The JSON envelope is

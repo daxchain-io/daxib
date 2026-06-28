@@ -16,7 +16,7 @@ import (
 )
 
 // server.go assembles the transport-agnostic *mcp.Server ONCE over the SAME
-// *service.Service both frontends share (docs/PLAN.md §6.8, §1). New is transport-free:
+// *service.Service both frontends share (docs/ARCHITECTURE.md §6.8, §1). New is transport-free:
 // it registers all tools and never changes when a transport is added. It touches no
 // keystore/network (lazy) so `daxib mcp tools` introspection is safe.
 

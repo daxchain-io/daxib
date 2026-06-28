@@ -16,7 +16,7 @@ import (
 // Service is THE daxib core composition root. The cli and mcpserver frontends are
 // thin adapters over it. In M2 it owns the keystore (keys.Store) and the secret
 // acquisition wiring; later milestones add the backend provider, coin selection,
-// the tx/PSBT pipeline, and the sealed-policy engine (docs/PLAN.md §8).
+// the tx/PSBT pipeline, and the sealed-policy engine (docs/ARCHITECTURE.md §8).
 type Service struct {
 	opts    Options
 	keys    *keys.Store

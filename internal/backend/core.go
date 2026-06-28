@@ -17,7 +17,7 @@ import (
 
 // coreClient is the Bitcoin Core JSON-RPC adapter. It is STATELESS — it never
 // creates or loads a bitcoind wallet — so UTXOs are read with scantxoutset over
-// address descriptors at the current tip (docs/PLAN.md §6). Each method is a thin,
+// address descriptors at the current tip (docs/ARCHITECTURE.md §6). Each method is a thin,
 // real JSON-RPC call:
 //
 //	getblockcount                          -> TipHeight

@@ -20,7 +20,7 @@ import (
 // policy_integration_test.go is THE central M6 guarantee made executable: it drives a
 // `send` through the OTHER frontend (the MCP server, over an in-memory MCP pipe the
 // way `daxib mcp serve` serves over stdio) against the SAME *service.Service the CLI
-// drives, and proves guardrails bind MCP IDENTICALLY (docs/PLAN.md §6.4):
+// drives, and proves guardrails bind MCP IDENTICALLY (docs/ARCHITECTURE.md §6.4):
 //
 //   - a within-limit `send` over MCP broadcasts (the money mover works over MCP);
 //   - an over-limit `send` over MCP returns the SAME policy.denied.* tool-error the

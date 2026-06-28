@@ -1,6 +1,6 @@
 // Package mcpserver is Frontend 2: the Model Context Protocol server over the SAME
 // *service.Service the Cobra frontend (internal/cli) drives. It is the executable
-// proof of the one-core/two-frontends architecture (docs/PLAN.md §1, §6): every tool
+// proof of the one-core/two-frontends architecture (docs/ARCHITECTURE.md §1, §6): every tool
 // handler is `args → the SAME domain request struct → the SAME service method →
 // result`, ~20 lines, with ZERO business logic. It physically cannot contain business
 // logic — the arch matrix (internal/arch_test.go + the depguard lattice) denies it the

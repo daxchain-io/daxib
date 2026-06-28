@@ -4,7 +4,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// helpers.go holds the tool-definition builders (docs/PLAN.md §6.4 annotations) the
+// helpers.go holds the tool-definition builders (docs/ARCHITECTURE.md §6.4 annotations) the
 // tools share. They are PURE frontend glue — they need only the MCP SDK, contain
 // ZERO business logic, and physically cannot reach a provider. The §6.6 error
 // helpers (toolError/dualSignal/dualResult) and the §6.5 progress wiring

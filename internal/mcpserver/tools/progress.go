@@ -7,7 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// progress.go is the docs/PLAN.md §6.5 long-running-op wiring: it maps the core's
+// progress.go is the docs/ARCHITECTURE.md §6.5 long-running-op wiring: it maps the core's
 // single domain.EventSink onto MCP progress notifications, gated on the client's
 // progress token. Long-running tools (tx_wait, and a wait-bearing send) BLOCK and
 // stream — the handler holds the call open and emits one notification per

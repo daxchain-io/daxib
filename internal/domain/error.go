@@ -124,7 +124,7 @@ const (
 	CodeUsage    = "usage" // family prefix; specific: usage.<reason>
 	// Backend (chain-read provider) codes — exit 6 NETWORK for the live-but-failing
 	// classes, exit 10 NOT_FOUND for the missing-config classes. They are the
-	// stable spellings the backend provider + service emit (docs/PLAN.md §6).
+	// stable spellings the backend provider + service emit (docs/ARCHITECTURE.md §6).
 	CodeBackendUnreachable   = "backend.unreachable"    // dial/transport failure (exit 6)
 	CodeBackendRPCError      = "backend.rpc_error"      // answered with an error (exit 6)
 	CodeBackendNotFound      = "backend.not_found"      // no endpoint by that name (exit 10)
@@ -190,7 +190,7 @@ const (
 // "policy.denied" key, not "policy"). An unmatched code maps to ExitInternal.
 //
 // This table IS the exit-code registry. cli/render.go projects every error
-// through ExitOf. The lanes follow docs/PLAN.md §4 (Bitcoin-flavored 0..12).
+// through ExitOf. The lanes follow docs/ARCHITECTURE.md §4 (Bitcoin-flavored 0..12).
 var codeExit = map[string]ExitCode{
 	// 1 — INTERNAL
 	"internal": ExitInternal,

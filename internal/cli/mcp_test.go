@@ -8,7 +8,7 @@ import (
 	"github.com/daxchain-io/daxib/internal/domain"
 )
 
-// mcp_test.go is the command-level suite for `daxib mcp` (docs/PLAN.md §6.7/§6.8):
+// mcp_test.go is the command-level suite for `daxib mcp` (docs/ARCHITECTURE.md §6.7/§6.8):
 // the `mcp tools` introspection (the compact table + footer; --json the tools/list
 // payload; <name> a single tool's schema) and the `mcp serve --transport` switch
 // (stdio accepted, http rejected). These build the server lazily (mcpserver.New

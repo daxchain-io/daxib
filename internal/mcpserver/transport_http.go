@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// transport_http.go is the RESERVED v1.1 HTTP + auth seam (docs/PLAN.md §6.8). It is
+// transport_http.go is the RESERVED v1.1 HTTP + auth seam (docs/ARCHITECTURE.md §6.8). It is
 // declared NOW so an authenticator hook has a home and v1.1 is a body swap touching
 // nothing above — a new file body + a new --transport enum value, not a refactor. In
 // v1 no net/http server is started; ServeHTTP refuses with a forward-pointing

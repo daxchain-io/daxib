@@ -10,7 +10,7 @@ import (
 	"github.com/daxchain-io/daxib/internal/mcpserver"
 )
 
-// mcp.go is the `daxib mcp` command tree (docs/PLAN.md §6): the Cobra side of
+// mcp.go is the `daxib mcp` command tree (docs/ARCHITECTURE.md §6): the Cobra side of
 // Frontend 2. Two subcommands:
 //
 //   - `daxib mcp serve --transport stdio` opens the SAME service every command opens,

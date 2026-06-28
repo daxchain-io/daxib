@@ -1,4 +1,4 @@
-// Package backend is daxib's chain-read provider seam (docs/PLAN.md §6): the
+// Package backend is daxib's chain-read provider seam (docs/ARCHITECTURE.md §6): the
 // single load-bearing test seam between the service core and a Bitcoin backend.
 // It is the Bitcoin sibling of daxie's internal/chain — same structure, swapped
 // chain: a backend.Client interface, a fully-resolved backend.Options that Dial
@@ -29,7 +29,7 @@ import (
 	"github.com/daxchain-io/daxib/internal/domain"
 )
 
-// Client is the chain-read boundary — THE universal test seam (docs/PLAN.md §6).
+// Client is the chain-read boundary — THE universal test seam (docs/ARCHITECTURE.md §6).
 // Every method is a thin, real adapter call (Core JSON-RPC or Esplora REST); the
 // same contract is satisfied by backend/fake. The pair is kept honest by the
 // adapter httptest suites + the fake, which assert the identical confirmation /

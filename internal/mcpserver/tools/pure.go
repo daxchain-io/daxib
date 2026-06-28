@@ -7,7 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// pure.go holds the read-only handler wrappers (docs/PLAN.md §6.2; no signing, no
+// pure.go holds the read-only handler wrappers (docs/ARCHITECTURE.md §6.2; no signing, no
 // policy reservation). They bind args → the SAME domain request → the SAME service
 // method → result. They contain NO business logic; the only difference between them
 // is the SHAPE of the service method (most reads are (ctx, In)→(Out, error); tx_wait

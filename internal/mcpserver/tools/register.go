@@ -1,5 +1,5 @@
 // Package tools is the MCP tool surface of daxib's SECOND thin frontend
-// (docs/PLAN.md §6.1/§6.2/§6.4). It is the executable proof of "guardrails apply
+// (docs/ARCHITECTURE.md §6.1/§6.2/§6.4). It is the executable proof of "guardrails apply
 // identically to MCP-initiated signing": every tool handler is the same few lines
 // around the same service call the CLI runs — bind the tool args into the SAME
 // domain request struct the CLI binds, call the SAME service method, return the

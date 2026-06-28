@@ -1,5 +1,5 @@
 // Package config owns daxib's on-disk config store for backend endpoints
-// (docs/PLAN.md §6): named bitcoind-RPC / Esplora connections bound to a network,
+// (docs/ARCHITECTURE.md §6): named bitcoind-RPC / Esplora connections bound to a network,
 // one default per network, stored in TOML with ${env:}/${file:} secret references
 // kept RAW (resolved transiently in service at dial time, never persisted, §7.5).
 //

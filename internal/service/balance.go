@@ -8,7 +8,7 @@ import (
 )
 
 // gapWindow is the forward look-ahead added to each branch's watermark when
-// deriving the address set to scan (docs/PLAN.md §3.1 / §3.13: gap-limit-aware
+// deriving the address set to scan (docs/ARCHITECTURE.md §3.1 / §3.13: gap-limit-aware
 // scanning). A balance therefore finds coins on addresses the wallet generated but
 // has not yet "used" via `address new`. 20 is the BIP-44 standard gap limit.
 const gapWindow = 20

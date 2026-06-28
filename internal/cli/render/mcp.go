@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// mcp.go renders `daxib mcp tools` (docs/PLAN.md §6.7): the human TOOL / KIND /
+// mcp.go renders `daxib mcp tools` (docs/ARCHITECTURE.md §6.7): the human TOOL / KIND /
 // DESCRIPTION table + the contract footer, the --json tools/list payload (the
 // byte-for-byte contract a client sees on connect, also the golden-test artifact),
 // and one tool's full schema for `mcp tools <name>`. It formats *mcp.Tool values the

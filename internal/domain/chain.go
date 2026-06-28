@@ -3,7 +3,7 @@ package domain
 // chain.go holds the Bitcoin chain-read value types the backend provider returns
 // and the service aggregates: a single UTXO, the fee-estimate table, and a tx's
 // confirmation status. These are the M3 analogs of daxie's account-balance /
-// receipt shapes, reframed for the UTXO model (docs/PLAN.md §3.1). They carry NO
+// receipt shapes, reframed for the UTXO model (docs/ARCHITECTURE.md §3.1). They carry NO
 // float field — every amount is an integer count of satoshis (the domain no-float
 // rule), and fee rates are sat/vByte carried as integers keyed by confirmation
 // target.
@@ -25,7 +25,7 @@ type UTXO struct {
 }
 
 // FeeEstimates is the sat/vByte fee table by confirmation target, returned by the
-// backend's estimator (docs/PLAN.md §3.8). It is plumbed by a later tx milestone;
+// backend's estimator (docs/ARCHITECTURE.md §3.8). It is plumbed by a later tx milestone;
 // M3 only proves both backends populate it. ByTarget maps a confirmation target
 // (in blocks) to the estimated fee rate in sat/vByte (rounded to an integer — the
 // domain holds no float). Slow/Normal/Fast are convenience projections the fee
@@ -38,7 +38,7 @@ type FeeEstimates struct {
 }
 
 // TxStatus is a transaction's confirmation state, returned by the backend
-// (docs/PLAN.md §3.8 / later tx milestone). Confirmed is true once the tx is in a
+// (docs/ARCHITECTURE.md §3.8 / later tx milestone). Confirmed is true once the tx is in a
 // block; BlockHeight/Confirmations are then populated. A still-mempool or unknown
 // tx reports Confirmed=false with zeroed heights.
 type TxStatus struct {

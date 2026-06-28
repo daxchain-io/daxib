@@ -1,5 +1,5 @@
 // Package archtest enforces the one-core/two-frontends import lattice
-// (docs/PLAN.md §1 "one core, two frontends") as a REAL Go test, not a comment or
+// (docs/ARCHITECTURE.md "one core, two frontends") as a REAL Go test, not a comment or
 // a linter config. The depguard rules in .golangci.yml are a fast lint-time belt;
 // this test is the load-bearing gate: it goes red the moment the dependency law
 // is broken, even with every linter uninstalled.
@@ -83,7 +83,7 @@ func (l layer) String() string {
 }
 
 // providerNames is the set of provider package names. None are authored in M1;
-// naming the v1 set now (docs/PLAN.md §2, §6, §8) means a future add cannot land
+// naming the v1 set now (docs/ARCHITECTURE.md) means a future add cannot land
 // on the wrong side of the matrix silently — registering it here is the only way
 // past TestNoUnclassifiedInternalPackages.
 var providerNames = map[string]bool{
@@ -186,7 +186,7 @@ func checkEdge(t *testing.T, fromPath string, from layer, imp string) {
 			// — Frontend 1 hosting Frontend 2). The REVERSE (mcpserver → cli) stays
 			// forbidden: mcpserver never reaches back into the CLI. A frontend importing
 			// its OWN subpackage (cli → cli/render, mcpserver → mcpserver/tools) is fine
-			// (docs/PLAN.md §1, §6).
+			// (docs/ARCHITECTURE.md).
 			if frontendOf(fromPath) != frontendOf(imp) && (frontendOf(fromPath) != "cli" || frontendOf(imp) != "mcpserver") {
 				t.Errorf("FRONTEND VIOLATION: %s imports the other frontend %s; only the cli → mcpserver wiring edge is sanctioned (mcpserver must never import cli)", fromPath, imp)
 			}
@@ -246,7 +246,7 @@ func TestNoUnclassifiedInternalPackages(t *testing.T) {
 // cross-frontend rule in TestImportMatrix: no file in internal/cli may import
 // internal/mcpserver and vice versa. The package-level matrix already enforces
 // this; this sweep makes the "one core, two INDEPENDENT frontends" guarantee a
-// load-bearing per-package regression guard (docs/PLAN.md §1) that engages the
+// load-bearing per-package regression guard (docs/ARCHITECTURE.md) that engages the
 // moment either frontend grows real files.
 func TestFrontendsDoNotImportEachOther(t *testing.T) {
 	for _, p := range goListAll(t) {

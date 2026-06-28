@@ -6,7 +6,7 @@
 //
 // One file per noun. M1 ships only `version` (the compiling-skeleton milestone);
 // later milestones add wallet/descriptor/address/balance/utxo/tx/psbt/fee/
-// receive/policy/mcp per docs/PLAN.md §4.
+// receive/policy/mcp per docs/ARCHITECTURE.md §4.
 package cli
 
 import (
@@ -77,7 +77,7 @@ func newRootCmd(ctx context.Context, rs *rootState) *cobra.Command {
 		newConfigCmd(ctx, rs),   // get/set/list operator config (backends + per-network default); rejects policy.*
 		newNetworkCmd(ctx, rs),  // select/inspect the active network (use/show/list); no silent default
 		newCompletionCmd(),      // shell completion script (bash/zsh/fish/powershell)
-		// descriptor/psbt land in later milestones (docs/PLAN.md §4, §8).
+		// descriptor/psbt land in later milestones (docs/ARCHITECTURE.md §4, §8).
 	)
 
 	return root

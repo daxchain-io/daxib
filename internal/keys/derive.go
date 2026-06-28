@@ -8,7 +8,7 @@ import (
 	"github.com/daxchain-io/daxib/internal/domain"
 )
 
-// BIP-84 derivation (the daxib choice, docs/PLAN.md §3.5). Path:
+// BIP-84 derivation (the daxib choice, docs/ARCHITECTURE.md §3.5). Path:
 //
 //	m / 84' / coin' / 0' / branch / index
 //

@@ -7,7 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// empty.go holds the two read-only policy verbs on the agent surface (docs/PLAN.md
+// empty.go holds the two read-only policy verbs on the agent surface (docs/ARCHITECTURE.md
 // §6.1): policy_show and policy_check. Every policy MUTATION is deliberately NOT a
 // tool (admin-passphrase-gated, the agent never holds it) — these two READ the
 // active policy so an agent can pre-flight a transfer.

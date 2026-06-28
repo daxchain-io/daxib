@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// write.go holds the funds-moving / mutation tools (docs/PLAN.md §6.1): send (the
+// write.go holds the funds-moving / mutation tools (docs/ARCHITECTURE.md §6.1): send (the
 // one money mover) and address_new (the receive affordance). The central guarantee
 // (§6.4): send routes through the SAME svc.SendTx the CLI `tx send` runs — the only
 // path that coin-selects → calls policy.Reserve (the chokepoint, INSIDE the service

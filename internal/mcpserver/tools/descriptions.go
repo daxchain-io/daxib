@@ -1,6 +1,6 @@
 package tools
 
-// descriptions.go holds the agent-facing tool descriptions (docs/PLAN.md §6.3) —
+// descriptions.go holds the agent-facing tool descriptions (docs/ARCHITECTURE.md §6.3) —
 // written for a model DECIDING WHICH TOOL TO CALL, not for a human reading docs.
 // They are the human-authored half of the §6.7 golden test (the schemas are
 // inferred; the descriptions are pinned), so a description change is a reviewed

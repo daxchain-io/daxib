@@ -1,6 +1,6 @@
 package domain
 
-// Bitcoin has five well-known networks (docs/PLAN.md §2.2 — "simpler than
+// Bitcoin has five well-known networks (docs/ARCHITECTURE.md §2.2 — "simpler than
 // chain-id"). The domain layer owns the canonical names + validation; the keys
 // provider maps each to its btcd chaincfg.Params (domain imports nothing
 // internal and must not pull in btcd).

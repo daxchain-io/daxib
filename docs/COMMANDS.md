@@ -26,6 +26,7 @@ binary and the source registry.
 - [Transactions and fees](#transactions-and-fees)
   - [tx](#tx)
   - [fee](#fee)
+  - [psbt](#psbt)
 - [Messages](#messages)
   - [sign](#sign)
   - [verify](#verify)
@@ -653,6 +654,50 @@ the relay floor.
 ```bash
 daxib --network testnet fee --speed fast
 daxib --network testnet --json fee
+```
+
+### psbt
+
+BIP-174 partially-signed Bitcoin transactions — for hardware-wallet, multisig, and
+air-gapped interop. A PSBT is passed as a positional base64 argument, `--psbt-file
+<path>`, or `--psbt-stdin`; output is base64 to stdout (or `--out <file>`), so the
+verbs pipe (`daxib psbt create … | daxib psbt sign --psbt-stdin`).
+
+- **`psbt create`** — coin-select the wallet's confirmed UTXOs to `--to`/`--amount`
+  and emit an UNSIGNED, fully-populated PSBT (prevout values + BIP-32 derivation).
+  Advances the change index; takes no policy reservation and signs nothing. Same fee
+  flags as `tx send` (`--fee-rate` / `--speed`).
+- **`psbt sign`** — **the policy chokepoint.** Detects the wallet's own inputs (by
+  script match), re-verifies their values against the backend, runs the per-recipient
+  allow/deny gate, and reserves the wallet's net outflow against the sealed limits
+  **before** signing — then attaches a partial signature to each owned input only
+  (foreign co-signer inputs are left untouched). Needs the keystore passphrase;
+  `--yes` skips the confirmation. Does not finalize.
+- **`psbt combine`** — merge PSBTs that share the same unsigned tx, unioning partial
+  signatures (multisig co-signer collection). Pure; rejects a merge of differing txs.
+- **`psbt finalize`** — assemble the final witness from the collected partial
+  signatures. Pure.
+- **`psbt extract`** — emit the raw network transaction (hex) from a finalized PSBT.
+  Pure.
+- **`psbt broadcast`** — finalize-if-needed, extract, and submit through the active
+  backend (the same broadcast + journal path as `tx send`); `--yes` gated.
+- **`psbt decode`** — inspect a PSBT (inputs/outputs/fee/which-are-mine/signed/
+  complete), human or `--json`. Read-only, passphrase-free.
+
+Over MCP only `psbt_decode`, `psbt_sign`, and `psbt_broadcast` are exposed (the last
+two policy-bound); `psbt_create`/`combine`/`finalize`/`extract` are operator-only.
+
+- Exit codes: `0`; `2` (`usage.psbt_required`, `usage.bad_psbt`, `psbt.not_owned`,
+  `psbt.incomplete`, `psbt.combine_mismatch`); `3` (`policy.denied.*`); `4`
+  (`keystore.bad_passphrase`); `7` (`policy.denied.fee_rate`); plus the `tx send`
+  lanes on `psbt broadcast`.
+
+```bash
+# air-gapped: create online, sign offline, broadcast online
+daxib --network testnet psbt create --to tb1q... --amount 50000sat --out unsigned.psbt
+daxib --network testnet psbt sign --psbt-file unsigned.psbt --out signed.psbt
+daxib --network testnet psbt broadcast --psbt-file signed.psbt --yes --json
+daxib --network testnet psbt decode --psbt-file signed.psbt --json
 ```
 
 ## Messages
