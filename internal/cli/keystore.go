@@ -51,7 +51,7 @@ func newKeystoreChangePassphraseCmd(ctx context.Context, rs *rootState) *cobra.C
 			}
 			defer closeFn()
 
-			res, err := svc.KeystoreChangePassphrase(cmd.Context(),
+			res, err := svc.KeystoreChangePassphrase(cmd.Context(), domain.LocalCLI(),
 				domain.KeystoreChangePassphraseRequest{Yes: rs.flags.Yes},
 				service.KeystoreChangePassphraseInput{
 					OldStdin: pf.stdin, OldFile: pf.file,
@@ -84,7 +84,7 @@ func newKeystoreInfoCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.KeystoreInfo(cmd.Context(), domain.KeystoreInfoRequest{})
+			res, err := svc.KeystoreInfo(cmd.Context(), domain.LocalCLI(), domain.KeystoreInfoRequest{})
 			if err != nil {
 				return err
 			}

@@ -41,12 +41,12 @@ func newFakeBackendService(t *testing.T, fc *fake.Client) (*Service, func()) {
 	if err != nil {
 		t.Fatalf("service.Open: %v", err)
 	}
-	if _, _, err := svc.BackendAdd(context.Background(), domain.BackendAddRequest{
+	if _, _, err := svc.BackendAdd(context.Background(), domain.LocalCLI(), domain.BackendAddRequest{
 		Name: "fakebk", Network: "mainnet", Type: domain.BackendEsplora, URL: "http://fake",
 	}); err != nil {
 		t.Fatalf("BackendAdd: %v", err)
 	}
-	if _, err := svc.BackendUse(context.Background(), domain.BackendUseRequest{Name: "fakebk"}); err != nil {
+	if _, err := svc.BackendUse(context.Background(), domain.LocalCLI(), domain.BackendUseRequest{Name: "fakebk"}); err != nil {
 		t.Fatalf("BackendUse: %v", err)
 	}
 	return svc, func() { _ = svc.Close() }
@@ -66,7 +66,7 @@ func TestBalance_WithFake(t *testing.T) {
 	defer done()
 	importCanonical(t, svc, "vec")
 
-	res, err := svc.Balance(context.Background(), domain.BalanceRequest{Wallet: "vec"})
+	res, err := svc.Balance(context.Background(), domain.LocalCLI(), domain.BalanceRequest{Wallet: "vec"})
 	if err != nil {
 		t.Fatalf("Balance: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestBalance_NotConfigured(t *testing.T) {
 	defer func() { _ = svc.Close() }()
 	importCanonical(t, svc, "vec")
 
-	_, err = svc.Balance(context.Background(), domain.BalanceRequest{Wallet: "vec"})
+	_, err = svc.Balance(context.Background(), domain.LocalCLI(), domain.BalanceRequest{Wallet: "vec"})
 	var de *domain.Error
 	if !errors.As(err, &de) || de.Code != domain.CodeBackendNotConfigured {
 		t.Fatalf("err = %v, want backend.not_configured", err)
@@ -130,7 +130,7 @@ func TestBackendTest_DialErrorPropagates(t *testing.T) {
 	svc, done := newFakeBackendService(t, fc)
 	defer done()
 
-	_, err := svc.BackendTest(context.Background(), domain.BackendTestRequest{Name: "fakebk"})
+	_, err := svc.BackendTest(context.Background(), domain.LocalCLI(), domain.BackendTestRequest{Name: "fakebk"})
 	var de *domain.Error
 	if !errors.As(err, &de) || de.Code != domain.CodeBackendUnreachable {
 		t.Fatalf("err = %v, want backend.unreachable", err)
@@ -175,13 +175,13 @@ func TestResolveSecretRef_ThroughBackendOptions(t *testing.T) {
 	}
 	defer func() { _ = svc.Close() }()
 
-	if _, _, err := svc.BackendAdd(context.Background(), domain.BackendAddRequest{
+	if _, _, err := svc.BackendAdd(context.Background(), domain.LocalCLI(), domain.BackendAddRequest{
 		Name: "core1", Network: "regtest", Type: domain.BackendCore,
 		URL: "http://127.0.0.1:18443", RPCUser: "x", RPCPassword: "${env:NODE_RPC_PASS}",
 	}); err != nil {
 		t.Fatalf("BackendAdd: %v", err)
 	}
-	if _, err := svc.BackendTest(context.Background(), domain.BackendTestRequest{Name: "core1"}); err != nil {
+	if _, err := svc.BackendTest(context.Background(), domain.LocalCLI(), domain.BackendTestRequest{Name: "core1"}); err != nil {
 		t.Fatalf("BackendTest: %v", err)
 	}
 	if gotPass != "resolved-secret" {

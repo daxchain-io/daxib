@@ -18,7 +18,7 @@ const gapWindow = 20
 // aggregates them into a confirmed / unconfirmed split (sats + exact BTC string).
 // With req.UTXOs the individual coins are enumerated. The active --network must
 // match the wallet's network.
-func (s *Service) Balance(ctx context.Context, req domain.BalanceRequest) (domain.BalanceResult, error) {
+func (s *Service) Balance(ctx context.Context, p domain.Principal, req domain.BalanceRequest) (domain.BalanceResult, error) {
 	wallet, err := s.resolveWallet(ctx, req.Wallet)
 	if err != nil {
 		return domain.BalanceResult{}, err
@@ -82,7 +82,7 @@ func (s *Service) Balance(ctx context.Context, req domain.BalanceRequest) (domai
 
 // UTXOList derives the same gap-window set, queries the backend, and returns the
 // per-UTXO breakdown (txid:vout, address, value, confirmations).
-func (s *Service) UTXOList(ctx context.Context, req domain.UTXOListRequest) (domain.UTXOListResult, error) {
+func (s *Service) UTXOList(ctx context.Context, p domain.Principal, req domain.UTXOListRequest) (domain.UTXOListResult, error) {
 	wallet, err := s.resolveWallet(ctx, req.Wallet)
 	if err != nil {
 		return domain.UTXOListResult{}, err

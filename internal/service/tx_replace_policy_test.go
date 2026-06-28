@@ -13,7 +13,7 @@ import (
 // windowUsed reads the rolling-24h counter total for the active network.
 func windowUsed(t *testing.T, svc *Service) int64 {
 	t.Helper()
-	cr, err := svc.PolicyCounters(context.Background())
+	cr, err := svc.PolicyCounters(context.Background(), domain.LocalCLI())
 	if err != nil {
 		t.Fatalf("PolicyCounters: %v", err)
 	}
@@ -39,14 +39,14 @@ func TestSpeedupPolicyChargesFeeDeltaOnly(t *testing.T) {
 	defer teardown()
 
 	// A generous day cap so neither the send nor the speedup is denied.
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
 	}
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
-	orig, err := svc.SendTx(context.Background(), domain.SendRequest{
+	orig, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "5", Yes: true,
 	}, nil)
 	if err != nil {
@@ -58,7 +58,7 @@ func TestSpeedupPolicyChargesFeeDeltaOnly(t *testing.T) {
 		t.Fatalf("after send window=%d, want %d (amount+fee)", usedAfterSend, want)
 	}
 
-	repl, err := svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	repl, err := svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err != nil {
@@ -91,12 +91,12 @@ func TestSpeedupPerTxCapUsesFullOutflow(t *testing.T) {
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
 	// Send under a generous policy first.
-	if _, e := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, e := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); e != nil {
 		t.Fatalf("PolicySet: %v", e)
 	}
-	o, e := svc.SendTx(context.Background(), domain.SendRequest{
+	o, e := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "5", Yes: true,
 	}, nil)
 	if e != nil {
@@ -105,7 +105,7 @@ func TestSpeedupPerTxCapUsesFullOutflow(t *testing.T) {
 	// Tighten max-tx to just above the original spend (amount+fee) but below
 	// amount+newFee at the bumped rate.
 	maxTx := o.AmountSat + o.FeeSat + 100
-	if _, e := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, e := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: bigStr(maxTx), AllowlistOn: boolFalse(),
 	}); e != nil {
 		t.Fatalf("PolicySet tighten: %v", e)
@@ -113,7 +113,7 @@ func TestSpeedupPerTxCapUsesFullOutflow(t *testing.T) {
 
 	// A big fee bump pushes amount+newFee over the per-tx cap ⇒ denied exit 3, even
 	// though only the fee delta would hit the daily window.
-	_, err := svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, err := svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: o.Txid, FeeRate: "500", Yes: true,
 	}, nil)
 	de := domain.AsError(err)
@@ -134,29 +134,29 @@ func TestSpeedupDeniedToDeAllowlistedRecipient(t *testing.T) {
 	defer teardown()
 
 	on := true
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: &on,
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
 	}
 	// Allow the recipient, send, then REMOVE it from the allowlist.
-	if _, err := svc.PolicyAllow(context.Background(), PolicyPinInput{Address: extRecipient}); err != nil {
+	if _, err := svc.PolicyAllow(context.Background(), domain.LocalCLI(), PolicyPinInput{Address: extRecipient}); err != nil {
 		t.Fatalf("PolicyAllow: %v", err)
 	}
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
-	orig, err := svc.SendTx(context.Background(), domain.SendRequest{
+	orig, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "5", Yes: true,
 	}, nil)
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	if _, err := svc.PolicyAllow(context.Background(), PolicyPinInput{Address: extRecipient, Remove: true}); err != nil {
+	if _, err := svc.PolicyAllow(context.Background(), domain.LocalCLI(), PolicyPinInput{Address: extRecipient, Remove: true}); err != nil {
 		t.Fatalf("PolicyAllow remove: %v", err)
 	}
 
 	// The speedup re-evaluates the (still-original) recipient under the allowlist ⇒
 	// DENIED (no bypass).
-	_, serr := svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, serr := svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	de := domain.AsError(serr)
@@ -177,17 +177,17 @@ func TestCancelToSelfAllowedWhenIncludeSelfOff(t *testing.T) {
 	defer teardown()
 
 	on, off := true, false
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: &on, IncludeSelf: &off,
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
 	}
 	// Allow the recipient so the original send is permitted.
-	if _, err := svc.PolicyAllow(context.Background(), PolicyPinInput{Address: extRecipient}); err != nil {
+	if _, err := svc.PolicyAllow(context.Background(), domain.LocalCLI(), PolicyPinInput{Address: extRecipient}); err != nil {
 		t.Fatalf("PolicyAllow: %v", err)
 	}
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
-	orig, err := svc.SendTx(context.Background(), domain.SendRequest{
+	orig, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "5", Yes: true,
 	}, nil)
 	if err != nil {
@@ -196,7 +196,7 @@ func TestCancelToSelfAllowedWhenIncludeSelfOff(t *testing.T) {
 
 	// Cancel redirects to a fresh change addr. Even with include_self OFF and the
 	// allowlist ON, the sealed ChangeAddr passes isSelf ⇒ the cancel is permitted.
-	res, cerr := svc.CancelTx(context.Background(), domain.CancelRequest{
+	res, cerr := svc.CancelTx(context.Background(), domain.LocalCLI(), domain.CancelRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if cerr != nil {

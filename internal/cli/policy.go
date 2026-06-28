@@ -68,7 +68,7 @@ func newPolicyReleaseCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyRelease(cmd.Context(), service.PolicyReleaseInput{
+			res, err := svc.PolicyRelease(cmd.Context(), domain.LocalCLI(), service.PolicyReleaseInput{
 				ReservationID: args[0], AdminStdin: af.stdin, AdminFile: af.file,
 			})
 			if err != nil {
@@ -95,7 +95,7 @@ func newPolicyShowCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyShow(cmd.Context())
+			res, err := svc.PolicyShow(cmd.Context(), domain.LocalCLI())
 			if err != nil {
 				return err
 			}
@@ -132,7 +132,7 @@ func newPolicySetCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			if ierr != nil {
 				return ierr
 			}
-			res, err := svc.PolicySet(cmd.Context(), service.PolicySetInput{
+			res, err := svc.PolicySet(cmd.Context(), domain.LocalCLI(), service.PolicySetInput{
 				MaxTxSat: maxTx, MaxDaySat: maxDay, MaxFeeRate: maxFeeRate,
 				Network: network, AllowlistOn: on, IncludeSelf: incl,
 				AdminStdin: af.stdin, AdminFile: af.file, AnchorOut: anchorOut,
@@ -172,7 +172,7 @@ func newPolicyAllowCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyAllow(cmd.Context(), service.PolicyPinInput{
+			res, err := svc.PolicyAllow(cmd.Context(), domain.LocalCLI(), service.PolicyPinInput{
 				Address: args[0], Label: label, Remove: remove,
 				AdminStdin: af.stdin, AdminFile: af.file, AnchorOut: anchorOut,
 			})
@@ -206,7 +206,7 @@ func newPolicyDenyCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyDeny(cmd.Context(), service.PolicyPinInput{
+			res, err := svc.PolicyDeny(cmd.Context(), domain.LocalCLI(), service.PolicyPinInput{
 				Address: args[0], Label: label, Remove: remove,
 				AdminStdin: af.stdin, AdminFile: af.file, AnchorOut: anchorOut,
 			})
@@ -237,7 +237,7 @@ func newPolicyVerifyCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			st, err := svc.PolicyVerify(cmd.Context())
+			st, err := svc.PolicyVerify(cmd.Context(), domain.LocalCLI())
 			if err != nil {
 				return err
 			}
@@ -266,7 +266,7 @@ func newPolicyCheckCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyCheck(cmd.Context(), service.PolicyCheckInput{
+			res, err := svc.PolicyCheck(cmd.Context(), domain.LocalCLI(), service.PolicyCheckInput{
 				To: to, Amount: amount, FeeRate: feeRate, FeeSat: feeSat,
 			})
 			if err != nil {
@@ -306,7 +306,7 @@ func newPolicyCountersCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyCounters(cmd.Context())
+			res, err := svc.PolicyCounters(cmd.Context(), domain.LocalCLI())
 			if err != nil {
 				return err
 			}
@@ -344,7 +344,7 @@ func newPolicyResetCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyReset(cmd.Context(), service.PolicyAdminInput{
+			res, err := svc.PolicyReset(cmd.Context(), domain.LocalCLI(), service.PolicyAdminInput{
 				AdminStdin: af.stdin, AdminFile: af.file, AnchorOut: anchorOut,
 			})
 			if err != nil {
@@ -377,14 +377,14 @@ func newPolicyPinCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			m := rs.flags.Mode()
 			switch {
 			case verify != "":
-				if err := svc.PolicyPinVerify(cmd.Context(), verify); err != nil {
+				if err := svc.PolicyPinVerify(cmd.Context(), domain.LocalCLI(), verify); err != nil {
 					return err
 				}
 				return render.Result(cmd.OutOrStdout(), m, map[string]any{"verified": true}, func(w io.Writer) {
 					render.Line(w, m, "policy.json verifies under the supplied key")
 				})
 			default:
-				view, raw, err := svc.PolicyPinPrint(cmd.Context())
+				view, raw, err := svc.PolicyPinPrint(cmd.Context(), domain.LocalCLI())
 				if err != nil {
 					return err
 				}
@@ -412,7 +412,7 @@ func newPolicyChangeAdminCmd(ctx context.Context, rs *rootState) *cobra.Command 
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PolicyChangeAdminPassphrase(cmd.Context(), service.PolicyRotateInput{
+			res, err := svc.PolicyChangeAdminPassphrase(cmd.Context(), domain.LocalCLI(), service.PolicyRotateInput{
 				AdminStdin: af.stdin, AdminFile: af.file,
 				NewStdin: anf.stdin, NewFile: anf.file, AnchorOut: anchorOut,
 			})

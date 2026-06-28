@@ -60,7 +60,7 @@ func TestSpeedupReconcileKeepsReplacedOriginalReservationCommitted(t *testing.T)
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -72,14 +72,14 @@ func TestSpeedupReconcileKeepsReplacedOriginalReservationCommitted(t *testing.T)
 	fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "simulated transport failure")
 	}
-	orig, _ := svc.SendTx(context.Background(), domain.SendRequest{
+	orig, _ := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "5", Yes: true,
 	}, nil)
 
 	// The network recovers: broadcasts succeed from here.
 	captureBroadcast(fake, new([]byte))
 
-	repl, err := svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	repl, err := svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err != nil {

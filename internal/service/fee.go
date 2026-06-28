@@ -26,7 +26,7 @@ const defaultSpeed = "normal"
 // applied. There is NO EIP-1559 base/tip split in Bitcoin — the backend's
 // sat/vByte estimate IS the feerate; the only jobs here are picking the speed
 // tier, applying the relay floor, and surfacing the per-target table.
-func (s *Service) Fee(ctx context.Context, req domain.FeeRequest) (domain.FeeQuotesResult, error) {
+func (s *Service) Fee(ctx context.Context, p domain.Principal, req domain.FeeRequest) (domain.FeeQuotesResult, error) {
 	client, backendName, _, err := s.dialActiveBackend(ctx)
 	if err != nil {
 		return domain.FeeQuotesResult{}, err

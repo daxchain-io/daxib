@@ -24,7 +24,7 @@ func TestAbandonNeverBroadcastFreesUTXOsAndRefundsReservation(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -37,7 +37,7 @@ func TestAbandonNeverBroadcastFreesUTXOsAndRefundsReservation(t *testing.T) {
 	fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "simulated transport failure")
 	}
-	stranded, _ := svc.SendTx(context.Background(), domain.SendRequest{
+	stranded, _ := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	if stranded.Status != domain.TxStateSigned {
@@ -48,7 +48,7 @@ func TestAbandonNeverBroadcastFreesUTXOsAndRefundsReservation(t *testing.T) {
 	}
 
 	// Abandon the never-broadcast signed tx.
-	res, err := svc.AbandonTx(context.Background(), domain.AbandonRequest{
+	res, err := svc.AbandonTx(context.Background(), domain.LocalCLI(), domain.AbandonRequest{
 		Wallet: "vec", Txid: stranded.Txid, Yes: true,
 	})
 	if err != nil {
@@ -74,7 +74,7 @@ func TestAbandonNeverBroadcastFreesUTXOsAndRefundsReservation(t *testing.T) {
 
 	// The freed UTXO is re-selectable: a fresh send (broadcast working now) succeeds.
 	captureBroadcast(fake, new([]byte))
-	retry, rerr := svc.SendTx(context.Background(), domain.SendRequest{
+	retry, rerr := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	if rerr != nil {
@@ -95,7 +95,7 @@ func TestAbandonRefusesBroadcastTx(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -103,7 +103,7 @@ func TestAbandonRefusesBroadcastTx(t *testing.T) {
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
 	// A normal send that broadcasts successfully ⇒ record `broadcast`.
-	sent, err := svc.SendTx(context.Background(), domain.SendRequest{
+	sent, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestAbandonRefusesBroadcastTx(t *testing.T) {
 	}
 
 	// Abandon must be REFUSED (exit 9) — a broadcast tx may still confirm.
-	_, aerr := svc.AbandonTx(context.Background(), domain.AbandonRequest{
+	_, aerr := svc.AbandonTx(context.Background(), domain.LocalCLI(), domain.AbandonRequest{
 		Wallet: "vec", Txid: sent.Txid, Yes: true,
 	})
 	if aerr == nil {
@@ -151,7 +151,7 @@ func TestAbandonRefusesSignedWithCommittedReservation(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -159,7 +159,7 @@ func TestAbandonRefusesSignedWithCommittedReservation(t *testing.T) {
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
 	// A successful send: reservation COMMITTED, record `broadcast`, bytes live.
-	sent, err := svc.SendTx(context.Background(), domain.SendRequest{
+	sent, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "0.005", FeeRate: "10", Yes: true,
 	}, nil)
 	if err != nil {
@@ -187,7 +187,7 @@ func TestAbandonRefusesSignedWithCommittedReservation(t *testing.T) {
 	}
 
 	// Abandon MUST be refused (the reservation is committed ⇒ the bytes may be live).
-	_, aerr := svc.AbandonTx(context.Background(), domain.AbandonRequest{
+	_, aerr := svc.AbandonTx(context.Background(), domain.LocalCLI(), domain.AbandonRequest{
 		Wallet: "vec", Txid: sent.Txid, Yes: true,
 	})
 	if aerr == nil {
@@ -217,7 +217,7 @@ func TestAbandonUnknownTxidNotFound(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	_, err := svc.AbandonTx(context.Background(), domain.AbandonRequest{
+	_, err := svc.AbandonTx(context.Background(), domain.LocalCLI(), domain.AbandonRequest{
 		Wallet: "vec", Txid: strings.Repeat("ab", 32), Yes: true,
 	})
 	if err == nil {

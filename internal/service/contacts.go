@@ -20,7 +20,7 @@ import (
 // ContactAdd validates the address for the active network (a bad address is a
 // usage error, exit 2), then pins the name→address entry under the registry lock.
 // A duplicate name is usage.duplicate (exit 2).
-func (s *Service) ContactAdd(ctx context.Context, req domain.ContactAddRequest) (domain.ContactAddResult, error) {
+func (s *Service) ContactAdd(ctx context.Context, p domain.Principal, req domain.ContactAddRequest) (domain.ContactAddResult, error) {
 	// `contacts add` validates the address against the active network and PINS that
 	// network on the entry (the CLI help and resolveDestination's network guard both
 	// assume a concrete network). With none resolved, chainParams() would silently fall
@@ -55,7 +55,7 @@ func (s *Service) ContactAdd(ctx context.Context, req domain.ContactAddRequest) 
 }
 
 // ContactList returns the name-sorted address book.
-func (s *Service) ContactList(ctx context.Context, _ domain.ContactListRequest) (domain.ContactListResult, error) {
+func (s *Service) ContactList(ctx context.Context, p domain.Principal, _ domain.ContactListRequest) (domain.ContactListResult, error) {
 	list, err := s.contacts.List(ctx)
 	if err != nil {
 		return domain.ContactListResult{}, err
@@ -68,7 +68,7 @@ func (s *Service) ContactList(ctx context.Context, _ domain.ContactListRequest) 
 }
 
 // ContactShow returns one contact by name (ref.not_found if unknown, exit 10).
-func (s *Service) ContactShow(ctx context.Context, req domain.ContactShowRequest) (domain.ContactShowResult, error) {
+func (s *Service) ContactShow(ctx context.Context, p domain.Principal, req domain.ContactShowRequest) (domain.ContactShowResult, error) {
 	c, err := s.contacts.Show(ctx, req.Name)
 	if err != nil {
 		return domain.ContactShowResult{}, err
@@ -77,7 +77,7 @@ func (s *Service) ContactShow(ctx context.Context, req domain.ContactShowRequest
 }
 
 // ContactRemove deletes one contact by name (ref.not_found if unknown, exit 10).
-func (s *Service) ContactRemove(ctx context.Context, req domain.ContactRemoveRequest) (domain.ContactRemoveResult, error) {
+func (s *Service) ContactRemove(ctx context.Context, p domain.Principal, req domain.ContactRemoveRequest) (domain.ContactRemoveResult, error) {
 	c, err := s.contacts.Remove(ctx, req.Name)
 	if err != nil {
 		return domain.ContactRemoveResult{}, err

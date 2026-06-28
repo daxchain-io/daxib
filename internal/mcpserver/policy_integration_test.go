@@ -74,15 +74,15 @@ func newMCPTestService(t *testing.T, fake *fakebackend.Client) (*service.Service
 	if err != nil {
 		t.Fatalf("service.Open: %v", err)
 	}
-	if _, _, err := svc.BackendAdd(context.Background(), domain.BackendAddRequest{
+	if _, _, err := svc.BackendAdd(context.Background(), domain.LocalCLI(), domain.BackendAddRequest{
 		Name: "fake-x", Network: "mainnet", Type: domain.BackendEsplora, URL: "http://fake",
 	}); err != nil {
 		t.Fatalf("BackendAdd: %v", err)
 	}
-	if _, err := svc.BackendUse(context.Background(), domain.BackendUseRequest{Name: "fake-x"}); err != nil {
+	if _, err := svc.BackendUse(context.Background(), domain.LocalCLI(), domain.BackendUseRequest{Name: "fake-x"}); err != nil {
 		t.Fatalf("BackendUse: %v", err)
 	}
-	if _, err := svc.WalletImport(context.Background(),
+	if _, err := svc.WalletImport(context.Background(), domain.LocalCLI(),
 		domain.WalletImportRequest{Name: "vec", Network: "mainnet"},
 		service.WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
@@ -198,7 +198,7 @@ func TestMCP_PolicyDeniesSend_NothingSigned(t *testing.T) {
 	defer done()
 
 	// Seal a restrictive policy via the admin path (the agent never holds this).
-	if _, err := svc.PolicySet(context.Background(), service.PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), service.PolicySetInput{
 		MaxTxSat: "100000", AllowlistOn: boolPtr(false),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -254,7 +254,7 @@ func TestMCP_PolicyAllowsSend_Broadcasts(t *testing.T) {
 	svc, done := newMCPTestService(t, fake)
 	defer done()
 
-	if _, err := svc.PolicySet(context.Background(), service.PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), service.PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolPtr(false),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)

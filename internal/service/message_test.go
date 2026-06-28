@@ -28,7 +28,7 @@ func importMsgWallet(t *testing.T) (*Service, func()) {
 		"DAXIB_PASSPHRASE":         "test-pass-12345678",
 		"DAXIB_PASSPHRASE_CONFIRM": "test-pass-12345678",
 	}, msgMnemonic)
-	if _, err := svc.WalletImport(context.Background(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc.WalletImport(context.Background(), domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		done()
 		t.Fatalf("WalletImport: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestServiceSignVerifyRoundtrip(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	sig, err := svc.MessageSign(ctx,
+	sig, err := svc.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: msgReceive0, Message: "hello daxib"},
 		MessageSignInput{Message: []byte("hello daxib")})
 	if err != nil {
@@ -54,7 +54,7 @@ func TestServiceSignVerifyRoundtrip(t *testing.T) {
 		t.Errorf("format = %q, want bip322-simple", sig.Format)
 	}
 
-	ver, err := svc.MessageVerify(ctx, domain.MessageVerifyRequest{
+	ver, err := svc.MessageVerify(ctx, domain.LocalCLI(), domain.MessageVerifyRequest{
 		Address: msgReceive0, Message: "hello daxib", Signature: sig.Signature,
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func TestServiceSignByRef(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	sig, err := svc.MessageSign(ctx,
+	sig, err := svc.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: "vec/0/0", Message: "via ref"},
 		MessageSignInput{Message: []byte("via ref")})
 	if err != nil {
@@ -81,7 +81,7 @@ func TestServiceSignByRef(t *testing.T) {
 	if sig.Address != msgReceive0 {
 		t.Fatalf("ref resolved to %q, want %q", sig.Address, msgReceive0)
 	}
-	ver, err := svc.MessageVerify(ctx, domain.MessageVerifyRequest{
+	ver, err := svc.MessageVerify(ctx, domain.LocalCLI(), domain.MessageVerifyRequest{
 		Address: sig.Address, Message: "via ref", Signature: sig.Signature,
 	})
 	if err != nil {
@@ -99,14 +99,14 @@ func TestServiceVerifyInvalidIsNotError(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	sig, err := svc.MessageSign(ctx,
+	sig, err := svc.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: msgReceive0, Message: "original"},
 		MessageSignInput{Message: []byte("original")})
 	if err != nil {
 		t.Fatalf("MessageSign: %v", err)
 	}
 	// Verify against a DIFFERENT message: well-formed signature, wrong message.
-	ver, verr := svc.MessageVerify(ctx, domain.MessageVerifyRequest{
+	ver, verr := svc.MessageVerify(ctx, domain.LocalCLI(), domain.MessageVerifyRequest{
 		Address: msgReceive0, Message: "tampered", Signature: sig.Signature,
 	})
 	if verr != nil {
@@ -124,7 +124,7 @@ func TestServiceVerifyBadSignature(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	_, err := svc.MessageVerify(ctx, domain.MessageVerifyRequest{
+	_, err := svc.MessageVerify(ctx, domain.LocalCLI(), domain.MessageVerifyRequest{
 		Address: msgReceive0, Message: "m", Signature: "!!!not base64!!!",
 	})
 	if err == nil {
@@ -141,7 +141,7 @@ func TestServiceSignBadAddress(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	_, err := svc.MessageSign(ctx,
+	_, err := svc.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: "not-an-address", Message: "m"},
 		MessageSignInput{Message: []byte("m")})
 	if err == nil {
@@ -163,7 +163,7 @@ func TestServiceSignWrongPassphrase(t *testing.T) {
 		"DAXIB_PASSPHRASE":         "test-pass-12345678",
 		"DAXIB_PASSPHRASE_CONFIRM": "test-pass-12345678",
 	}, msgMnemonic)
-	if _, err := svc1.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc1.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
 	_ = svc1.Close()
@@ -174,7 +174,7 @@ func TestServiceSignWrongPassphrase(t *testing.T) {
 		"DAXIB_PASSPHRASE": "WRONG-pass-12345678",
 	}, "")
 	defer func() { _ = svc2.Close() }()
-	_, err := svc2.MessageSign(ctx,
+	_, err := svc2.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: msgReceive0, Message: "m"},
 		MessageSignInput{Message: []byte("m")})
 	if err == nil {
@@ -220,7 +220,7 @@ func TestServiceSignBoundNetworkMismatch(t *testing.T) {
 
 	// Import a BOUND mainnet wallet (coin_type 0).
 	svcMain := openAt("mainnet")
-	if _, err := svcMain.WalletImport(ctx,
+	if _, err := svcMain.WalletImport(ctx, domain.LocalCLI(),
 		domain.WalletImportRequest{Name: "locked", Network: domain.NetworkMainnet, Bind: true},
 		WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport bound mainnet: %v", err)
@@ -234,7 +234,7 @@ func TestServiceSignBoundNetworkMismatch(t *testing.T) {
 	defer func() { _ = svcTest.Close() }()
 
 	// Slash-ref form (the regression case).
-	_, err := svcTest.MessageSign(ctx,
+	_, err := svcTest.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: "locked/0/0", Message: "hi"},
 		MessageSignInput{Message: []byte("hi")})
 	if got := code(t, err); got != "usage.network_mismatch" {
@@ -242,7 +242,7 @@ func TestServiceSignBoundNetworkMismatch(t *testing.T) {
 	}
 
 	// Explicit --wallet hint on a bare-address ref must also be guarded.
-	_, err = svcTest.MessageSign(ctx,
+	_, err = svcTest.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Wallet: "locked", Ref: msgReceive0, Message: "hi"},
 		MessageSignInput{Message: []byte("hi")})
 	if got := code(t, err); got != "usage.network_mismatch" {
@@ -281,11 +281,11 @@ func TestServiceSignAgnosticCrossNetwork(t *testing.T) {
 	ctx := context.Background()
 
 	svcMain := openAt("mainnet")
-	if _, err := svcMain.WalletImport(ctx,
+	if _, err := svcMain.WalletImport(ctx, domain.LocalCLI(),
 		domain.WalletImportRequest{Name: "any"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport agnostic: %v", err)
 	}
-	mainSig, err := svcMain.MessageSign(ctx,
+	mainSig, err := svcMain.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: "any/0/0", Message: "hi"},
 		MessageSignInput{Message: []byte("hi")})
 	if err != nil {
@@ -298,7 +298,7 @@ func TestServiceSignAgnosticCrossNetwork(t *testing.T) {
 
 	svcTest := openAt("testnet")
 	defer func() { _ = svcTest.Close() }()
-	testSig, err := svcTest.MessageSign(ctx,
+	testSig, err := svcTest.MessageSign(ctx, domain.LocalCLI(),
 		domain.MessageSignRequest{Ref: "any/0/0", Message: "hi"},
 		MessageSignInput{Message: []byte("hi")})
 	if err != nil {

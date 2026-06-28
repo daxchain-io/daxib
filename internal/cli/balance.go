@@ -28,7 +28,7 @@ func newBalanceCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.Balance(cmd.Context(), domain.BalanceRequest{Wallet: wallet, UTXOs: utxos})
+			res, err := svc.Balance(cmd.Context(), domain.LocalCLI(), domain.BalanceRequest{Wallet: wallet, UTXOs: utxos})
 			if err != nil {
 				return err
 			}
@@ -78,7 +78,7 @@ func newUTXOListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.UTXOList(cmd.Context(), domain.UTXOListRequest{Wallet: wallet})
+			res, err := svc.UTXOList(cmd.Context(), domain.LocalCLI(), domain.UTXOListRequest{Wallet: wallet})
 			if err != nil {
 				return err
 			}

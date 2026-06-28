@@ -56,7 +56,7 @@ func newBackendAddCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, warnings, err := svc.BackendAdd(cmd.Context(), domain.BackendAddRequest{
+			res, warnings, err := svc.BackendAdd(cmd.Context(), domain.LocalCLI(), domain.BackendAddRequest{
 				Name: args[0], Network: network, Type: bt, URL: url,
 				RPCUser: rpcuser, RPCPassword: rpcpassword, RPCCookie: rpccookie,
 			})
@@ -94,7 +94,7 @@ func newBackendListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.BackendList(cmd.Context(), domain.BackendListRequest{})
+			res, err := svc.BackendList(cmd.Context(), domain.LocalCLI(), domain.BackendListRequest{})
 			if err != nil {
 				return err
 			}
@@ -129,7 +129,7 @@ func newBackendUseCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.BackendUse(cmd.Context(), domain.BackendUseRequest{Name: args[0]})
+			res, err := svc.BackendUse(cmd.Context(), domain.LocalCLI(), domain.BackendUseRequest{Name: args[0]})
 			if err != nil {
 				return err
 			}
@@ -160,7 +160,7 @@ func newBackendTestCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.BackendTest(cmd.Context(), domain.BackendTestRequest{Name: name})
+			res, err := svc.BackendTest(cmd.Context(), domain.LocalCLI(), domain.BackendTestRequest{Name: name})
 			if err != nil {
 				return err
 			}
@@ -188,7 +188,7 @@ func newBackendRemoveCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.BackendRemove(cmd.Context(), domain.BackendRemoveRequest{Name: args[0]})
+			res, err := svc.BackendRemove(cmd.Context(), domain.LocalCLI(), domain.BackendRemoveRequest{Name: args[0]})
 			if err != nil {
 				return err
 			}

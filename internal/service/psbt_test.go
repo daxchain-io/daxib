@@ -78,7 +78,7 @@ func TestPSBTCreateThenSignAttachesPartialSig(t *testing.T) {
 	defer teardown()
 
 	// A generous cap (allowlist off): the sign is in-policy.
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -86,7 +86,7 @@ func TestPSBTCreateThenSignAttachesPartialSig(t *testing.T) {
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
 	// 1. Create an unsigned PSBT.
-	cre, err := svc.PSBTCreate(context.Background(), domain.PSBTCreateRequest{
+	cre, err := svc.PSBTCreate(context.Background(), domain.LocalCLI(), domain.PSBTCreateRequest{
 		Wallet: "vec", To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Amount: "0.005", FeeRate: "10",
 	})
 	if err != nil {
@@ -106,7 +106,7 @@ func TestPSBTCreateThenSignAttachesPartialSig(t *testing.T) {
 	}
 
 	// 2. Sign it (in-policy ⇒ a PartialSig is attached).
-	sig, err := svc.PSBTSign(context.Background(),
+	sig, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: cre.PSBT, Wallet: "vec", Yes: true},
 		PSBTSignInput{})
 	if err != nil {
@@ -144,7 +144,7 @@ func TestPSBTCreateThenSignAttachesPartialSig(t *testing.T) {
 	}
 
 	// The reservation is RESERVED (not committed) — sign does not broadcast.
-	cr, _ := svc.PolicyCounters(context.Background())
+	cr, _ := svc.PolicyCounters(context.Background(), domain.LocalCLI())
 	if len(cr.Counters) == 0 || cr.Counters[0].Used24hSat == "0" {
 		t.Fatalf("psbt sign must reserve the spend in the rolling-24h window: %+v", cr.Counters)
 	}
@@ -159,12 +159,12 @@ func TestPSBTSignDeniedOverLimitProducesNoSignature(t *testing.T) {
 
 	// First, with a GENEROUS policy, CREATE the PSBT (create takes no reservation and
 	// is not policy-gated).
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet (generous): %v", err)
 	}
-	cre, err := svc.PSBTCreate(context.Background(), domain.PSBTCreateRequest{
+	cre, err := svc.PSBTCreate(context.Background(), domain.LocalCLI(), domain.PSBTCreateRequest{
 		Wallet: "vec", To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Amount: "0.005", FeeRate: "10",
 	})
 	if err != nil {
@@ -172,14 +172,14 @@ func TestPSBTSignDeniedOverLimitProducesNoSignature(t *testing.T) {
 	}
 
 	// Now TIGHTEN the per-tx cap WELL below the spend (500_000 sat external).
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet (tight): %v", err)
 	}
 
 	// Signing must be DENIED (exit 3) and produce NO PartialSig.
-	res, err := svc.PSBTSign(context.Background(),
+	res, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: cre.PSBT, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err == nil {
 		t.Fatal("an over-limit psbt sign must be denied")
@@ -215,25 +215,25 @@ func TestPSBTCreateSignBroadcastPipeline(t *testing.T) {
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
 
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
 	}
 	programUTXO(fake, canonicalReceive0, "11"+strings.Repeat("0", 62), 0, 1_000_000)
 
-	cre, err := svc.PSBTCreate(context.Background(), domain.PSBTCreateRequest{
+	cre, err := svc.PSBTCreate(context.Background(), domain.LocalCLI(), domain.PSBTCreateRequest{
 		Wallet: "vec", To: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Amount: "0.005", FeeRate: "10",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	sig, err := svc.PSBTSign(context.Background(),
+	sig, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: cre.PSBT, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
-	res, err := svc.PSBTBroadcast(context.Background(),
+	res, err := svc.PSBTBroadcast(context.Background(), domain.LocalCLI(),
 		domain.PSBTBroadcastRequest{PSBT: sig.PSBT, Wallet: "vec", Yes: true}, nil)
 	if err != nil {
 		t.Fatalf("broadcast: %v", err)
@@ -253,7 +253,7 @@ func TestPSBTCreateSignBroadcastPipeline(t *testing.T) {
 		t.Fatalf("broadcast txid mismatch")
 	}
 	// The reservation is now COMMITTED (broadcast accepted).
-	cr, _ := svc.PolicyCounters(context.Background())
+	cr, _ := svc.PolicyCounters(context.Background(), domain.LocalCLI())
 	if len(cr.Counters) == 0 || cr.Counters[0].Used24hSat == "0" {
 		t.Fatalf("a broadcast PSBT must keep the reservation committed: %+v", cr.Counters)
 	}
@@ -264,7 +264,7 @@ func TestPSBTSignRejectsForeignOnlyPSBT(t *testing.T) {
 	fake.Tip = 800000
 	svc, teardown := newPolicySendService(t, fake)
 	defer teardown()
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "100000000", MaxDaySat: "100000000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("PolicySet: %v", err)
@@ -273,7 +273,7 @@ func TestPSBTSignRejectsForeignOnlyPSBT(t *testing.T) {
 	// A PSBT whose single input pays a FOREIGN script (not in the wallet's gap window):
 	// sign must refuse with psbt.not_owned.
 	foreign := buildForeignPSBT(t)
-	_, err := svc.PSBTSign(context.Background(),
+	_, err := svc.PSBTSign(context.Background(), domain.LocalCLI(),
 		domain.PSBTSignRequest{PSBT: foreign, Wallet: "vec", Yes: true}, PSBTSignInput{})
 	if err == nil {
 		t.Fatal("signing a PSBT with no owned inputs must error")

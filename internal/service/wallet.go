@@ -41,7 +41,7 @@ type WalletUpgradeInput struct {
 // WalletCreate generates a fresh mnemonic, encrypts it, derives the first receive
 // address, and returns the once-only mnemonic in the result (Sensitive=true). The
 // keystore passphrase is verified (or, on first init, confirmed) first.
-func (s *Service) WalletCreate(ctx context.Context, req domain.WalletCreateRequest, in WalletCreateInput) (domain.WalletCreateResult, error) {
+func (s *Service) WalletCreate(ctx context.Context, p domain.Principal, req domain.WalletCreateRequest, in WalletCreateInput) (domain.WalletCreateResult, error) {
 	network, err := s.walletNetwork(req.Network)
 	if err != nil {
 		return domain.WalletCreateResult{}, err
@@ -99,7 +99,7 @@ func (s *Service) WalletCreate(ctx context.Context, req domain.WalletCreateReque
 // WalletImport ingests an existing mnemonic (stdin/file only) with an optional
 // BIP-39 passphrase, checksum-validating it. The keystore passphrase is verified
 // (or confirmed on first init) first.
-func (s *Service) WalletImport(ctx context.Context, req domain.WalletImportRequest, in WalletImportInput) (domain.WalletImportResult, error) {
+func (s *Service) WalletImport(ctx context.Context, p domain.Principal, req domain.WalletImportRequest, in WalletImportInput) (domain.WalletImportResult, error) {
 	network, err := s.walletNetwork(req.Network)
 	if err != nil {
 		return domain.WalletImportResult{}, err
@@ -175,7 +175,7 @@ func (s *Service) WalletImport(ctx context.Context, req domain.WalletImportReque
 }
 
 // WalletList returns every wallet's summary.
-func (s *Service) WalletList(ctx context.Context, _ domain.WalletListRequest) (domain.WalletListResult, error) {
+func (s *Service) WalletList(ctx context.Context, p domain.Principal, _ domain.WalletListRequest) (domain.WalletListResult, error) {
 	// wallet list renders each wallet's sample address PER NETWORK, so it requires a
 	// resolved network (no silent default).
 	if err := s.requireNetwork(); err != nil {
@@ -205,7 +205,7 @@ func (s *Service) WalletList(ctx context.Context, _ domain.WalletListRequest) (d
 }
 
 // WalletShow returns one wallet's detail.
-func (s *Service) WalletShow(ctx context.Context, req domain.WalletShowRequest) (domain.WalletShowResult, error) {
+func (s *Service) WalletShow(ctx context.Context, p domain.Principal, req domain.WalletShowRequest) (domain.WalletShowResult, error) {
 	// wallet show renders per-network (sample addresses, next-index addresses), so it
 	// requires a resolved network (no silent default).
 	if err := s.requireNetwork(); err != nil {
@@ -234,7 +234,7 @@ func (s *Service) WalletShow(ctx context.Context, req domain.WalletShowRequest) 
 // WalletUpgrade promotes a bound/legacy wallet to network-agnostic: it derives the
 // missing coin_type chain from the seed (one-time passphrase) so the wallet then
 // works on every network. An already-agnostic wallet is usage.already_agnostic.
-func (s *Service) WalletUpgrade(ctx context.Context, req domain.WalletUpgradeRequest, in WalletUpgradeInput) (domain.WalletUpgradeResult, error) {
+func (s *Service) WalletUpgrade(ctx context.Context, p domain.Principal, req domain.WalletUpgradeRequest, in WalletUpgradeInput) (domain.WalletUpgradeResult, error) {
 	pass, _, err := s.acquire(passphraseSpec(in.PassphraseStdin, in.PassphraseFile, false))
 	if err != nil {
 		return domain.WalletUpgradeResult{}, err
@@ -257,7 +257,7 @@ func (s *Service) WalletUpgrade(ctx context.Context, req domain.WalletUpgradeReq
 
 // WalletExport decrypts and returns a wallet's mnemonic + bip39 passphrase
 // (operator-only; needs the passphrase).
-func (s *Service) WalletExport(ctx context.Context, req domain.WalletExportRequest, in WalletExportInput) (domain.WalletExportResult, error) {
+func (s *Service) WalletExport(ctx context.Context, p domain.Principal, req domain.WalletExportRequest, in WalletExportInput) (domain.WalletExportResult, error) {
 	pass, _, err := s.acquire(passphraseSpec(in.PassphraseStdin, in.PassphraseFile, false))
 	if err != nil {
 		return domain.WalletExportResult{}, err

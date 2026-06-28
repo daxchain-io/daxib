@@ -50,7 +50,7 @@ func newConfigListCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.ConfigList(cmd.Context())
+			res, err := svc.ConfigList(cmd.Context(), domain.LocalCLI())
 			if err != nil {
 				return err
 			}
@@ -80,7 +80,7 @@ func newConfigGetCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.ConfigGet(cmd.Context(), domain.ConfigGetRequest{Key: args[0]})
+			res, err := svc.ConfigGet(cmd.Context(), domain.LocalCLI(), domain.ConfigGetRequest{Key: args[0]})
 			if err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func newConfigSetCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.ConfigSet(cmd.Context(), domain.ConfigSetRequest{Key: args[0], Value: args[1]})
+			res, err := svc.ConfigSet(cmd.Context(), domain.LocalCLI(), domain.ConfigSetRequest{Key: args[0], Value: args[1]})
 			if err != nil {
 				return err
 			}

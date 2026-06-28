@@ -61,7 +61,7 @@ func TestServiceWalletImportListNew(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	imp, err := svc.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true})
+	imp, err := svc.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true})
 	if err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestServiceWalletImportListNew(t *testing.T) {
 		t.Fatalf("import receive0 = %q, want canonical 0/0", imp.Receive0Address)
 	}
 
-	list, err := svc.AddressList(ctx, domain.AddressListRequest{Wallet: "vec"})
+	list, err := svc.AddressList(ctx, domain.LocalCLI(), domain.AddressListRequest{Wallet: "vec"})
 	if err != nil {
 		t.Fatalf("AddressList: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestServiceWalletImportListNew(t *testing.T) {
 		t.Fatalf("AddressList = %+v, want the single canonical 0/0", list.Addresses)
 	}
 
-	next, err := svc.AddressNew(ctx, domain.AddressNewRequest{Wallet: "vec"})
+	next, err := svc.AddressNew(ctx, domain.LocalCLI(), domain.AddressNewRequest{Wallet: "vec"})
 	if err != nil {
 		t.Fatalf("AddressNew: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestServiceWrongPassphrase(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	if _, err := svc.WalletCreate(ctx, domain.WalletCreateRequest{Name: "vec", Words: 12, Yes: true}, WalletCreateInput{}); err != nil {
+	if _, err := svc.WalletCreate(ctx, domain.LocalCLI(), domain.WalletCreateRequest{Name: "vec", Words: 12, Yes: true}, WalletCreateInput{}); err != nil {
 		t.Fatalf("WalletCreate: %v", err)
 	}
 
@@ -115,7 +115,7 @@ func TestServiceWrongPassphrase(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer func() { _ = wrong.Close() }()
-	_, err = wrong.WalletCreate(ctx, domain.WalletCreateRequest{Name: "other", Words: 12, Yes: true}, WalletCreateInput{})
+	_, err = wrong.WalletCreate(ctx, domain.LocalCLI(), domain.WalletCreateRequest{Name: "other", Words: 12, Yes: true}, WalletCreateInput{})
 	if got := code(t, err); got != "keystore.bad_passphrase" {
 		t.Fatalf("wrong-passphrase code = %q, want keystore.bad_passphrase", got)
 	}
@@ -128,7 +128,7 @@ func TestServiceConfirmRequired(t *testing.T) {
 		"DAXIB_PASSPHRASE": "lonely-pass-1234", // no CONFIRM set
 	}, "")
 	defer done()
-	_, err := svc.WalletCreate(context.Background(), domain.WalletCreateRequest{Name: "vec", Words: 12, Yes: true}, WalletCreateInput{})
+	_, err := svc.WalletCreate(context.Background(), domain.LocalCLI(), domain.WalletCreateRequest{Name: "vec", Words: 12, Yes: true}, WalletCreateInput{})
 	if got := code(t, err); got != "keystore.confirm_required" {
 		t.Fatalf("no-confirm code = %q, want keystore.confirm_required", got)
 	}
@@ -147,11 +147,11 @@ func TestServiceBoundNetworkMismatch(t *testing.T) {
 	ctx := context.Background()
 
 	// Import a BOUND testnet wallet while the service's active network is mainnet.
-	if _, err := svc.WalletImport(ctx, domain.WalletImportRequest{Name: "tnet", Network: domain.NetworkTestnet, Bind: true}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "tnet", Network: domain.NetworkTestnet, Bind: true}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport bound testnet: %v", err)
 	}
 	// address new on the mainnet-active service must refuse the bound testnet wallet.
-	_, err := svc.AddressNew(ctx, domain.AddressNewRequest{Wallet: "tnet"})
+	_, err := svc.AddressNew(ctx, domain.LocalCLI(), domain.AddressNewRequest{Wallet: "tnet"})
 	if got := code(t, err); got != "usage.network_mismatch" {
 		t.Fatalf("network-mismatch code = %q, want usage.network_mismatch", got)
 	}
@@ -189,10 +189,10 @@ func TestServiceAgnosticCrossNetwork(t *testing.T) {
 
 	// Create an AGNOSTIC wallet on mainnet (the default; no Bind).
 	svcMain, closeMain := openAt("mainnet")
-	if _, err := svcMain.WalletImport(ctx, domain.WalletImportRequest{Name: "any"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svcMain.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "any"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport agnostic: %v", err)
 	}
-	mainAddr, err := svcMain.AddressNew(ctx, domain.AddressNewRequest{Wallet: "any"})
+	mainAddr, err := svcMain.AddressNew(ctx, domain.LocalCLI(), domain.AddressNewRequest{Wallet: "any"})
 	if err != nil {
 		t.Fatalf("AddressNew mainnet: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestServiceAgnosticCrossNetwork(t *testing.T) {
 	// Reopen the SAME keystore on testnet; the agnostic wallet derives there too.
 	svcTest, closeTest := openAt("testnet")
 	defer closeTest()
-	testAddr, err := svcTest.AddressNew(ctx, domain.AddressNewRequest{Wallet: "any"})
+	testAddr, err := svcTest.AddressNew(ctx, domain.LocalCLI(), domain.AddressNewRequest{Wallet: "any"})
 	if err != nil {
 		t.Fatalf("AddressNew testnet (agnostic should not be guarded): %v", err)
 	}
@@ -226,15 +226,15 @@ func TestServiceWalletListShowExport(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	if _, err := svc.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
 	// Allocate one more receive address so the watermark advances past 0.
-	if _, err := svc.AddressNew(ctx, domain.AddressNewRequest{Wallet: "vec"}); err != nil {
+	if _, err := svc.AddressNew(ctx, domain.LocalCLI(), domain.AddressNewRequest{Wallet: "vec"}); err != nil {
 		t.Fatalf("AddressNew: %v", err)
 	}
 
-	list, err := svc.WalletList(ctx, domain.WalletListRequest{})
+	list, err := svc.WalletList(ctx, domain.LocalCLI(), domain.WalletListRequest{})
 	if err != nil {
 		t.Fatalf("WalletList: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestServiceWalletListShowExport(t *testing.T) {
 		t.Errorf("WalletList default = %q (entry.Default=%v), want vec/true", list.Default, list.Wallets[0].Default)
 	}
 
-	show, err := svc.WalletShow(ctx, domain.WalletShowRequest{Name: "vec"})
+	show, err := svc.WalletShow(ctx, domain.LocalCLI(), domain.WalletShowRequest{Name: "vec"})
 	if err != nil {
 		t.Fatalf("WalletShow: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestServiceWalletListShowExport(t *testing.T) {
 		t.Errorf("WalletShow addresses = %d, want 2", show.Addresses)
 	}
 
-	exp, err := svc.WalletExport(ctx, domain.WalletExportRequest{Name: "vec"}, WalletExportInput{})
+	exp, err := svc.WalletExport(ctx, domain.LocalCLI(), domain.WalletExportRequest{Name: "vec"}, WalletExportInput{})
 	if err != nil {
 		t.Fatalf("WalletExport: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestServiceWalletExportWrongPassphrase(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	if _, err := svc.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
 
@@ -297,7 +297,7 @@ func TestServiceWalletExportWrongPassphrase(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer func() { _ = wrong.Close() }()
-	_, err = wrong.WalletExport(ctx, domain.WalletExportRequest{Name: "vec"}, WalletExportInput{})
+	_, err = wrong.WalletExport(ctx, domain.LocalCLI(), domain.WalletExportRequest{Name: "vec"}, WalletExportInput{})
 	if got := code(t, err); got != "keystore.bad_passphrase" {
 		t.Fatalf("export wrong-passphrase code = %q, want keystore.bad_passphrase", got)
 	}
@@ -315,11 +315,11 @@ func TestServiceDefaultWalletResolution(t *testing.T) {
 	defer done()
 	ctx := context.Background()
 
-	if _, err := svc.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
 	// No Wallet on the request → resolves to the default ('vec').
-	next, err := svc.AddressNew(ctx, domain.AddressNewRequest{})
+	next, err := svc.AddressNew(ctx, domain.LocalCLI(), domain.AddressNewRequest{})
 	if err != nil {
 		t.Fatalf("AddressNew default: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestServiceDefaultWalletResolution(t *testing.T) {
 func TestServiceNoDefaultWallet(t *testing.T) {
 	svc, done := newTestService(t, map[string]string{}, "")
 	defer done()
-	_, err := svc.AddressNew(context.Background(), domain.AddressNewRequest{})
+	_, err := svc.AddressNew(context.Background(), domain.LocalCLI(), domain.AddressNewRequest{})
 	if got := code(t, err); got != "wallet.not_found" {
 		t.Fatalf("no-default code = %q, want wallet.not_found", got)
 	}
@@ -352,7 +352,7 @@ func TestServiceMnemonicRequiredLabelAware(t *testing.T) {
 		"DAXIB_PASSPHRASE_CONFIRM": "test-pass-12345678",
 	}, "") // empty stdin, MnemonicStdin not set
 	defer done()
-	_, err := svc.WalletImport(context.Background(), domain.WalletImportRequest{Name: "nomnem"}, WalletImportInput{})
+	_, err := svc.WalletImport(context.Background(), domain.LocalCLI(), domain.WalletImportRequest{Name: "nomnem"}, WalletImportInput{})
 	var de *domain.Error
 	if !errors.As(err, &de) {
 		t.Fatalf("error %v is not a *domain.Error", err)

@@ -10,7 +10,7 @@ import (
 // records the address (no passphrase needed — derivation is from the stored
 // neutered xpub), and returns it. The active --network must match the wallet's
 // network (§3.5).
-func (s *Service) AddressNew(ctx context.Context, req domain.AddressNewRequest) (domain.AddressNewResult, error) {
+func (s *Service) AddressNew(ctx context.Context, p domain.Principal, req domain.AddressNewRequest) (domain.AddressNewResult, error) {
 	wallet, err := s.resolveWallet(ctx, req.Wallet)
 	if err != nil {
 		return domain.AddressNewResult{}, err
@@ -39,7 +39,7 @@ func (s *Service) AddressNew(ctx context.Context, req domain.AddressNewRequest) 
 
 // AddressList lists a wallet's materialized addresses. The active --network must
 // match the wallet's network.
-func (s *Service) AddressList(ctx context.Context, req domain.AddressListRequest) (domain.AddressListResult, error) {
+func (s *Service) AddressList(ctx context.Context, p domain.Principal, req domain.AddressListRequest) (domain.AddressListResult, error) {
 	wallet, err := s.resolveWallet(ctx, req.Wallet)
 	if err != nil {
 		return domain.AddressListResult{}, err

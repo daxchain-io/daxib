@@ -118,13 +118,13 @@ func assertPolicyVerifiesUnder(t *testing.T, dirs rotationDirs, fake *fakebacken
 	defer teardown()
 
 	// policy.json verifies under the (converged) pinned anchor.
-	st, err := svc.PolicyVerify(context.Background())
+	st, err := svc.PolicyVerify(context.Background(), domain.LocalCLI())
 	if err != nil || !st.Verified {
 		t.Fatalf("policy.json must verify after recovery: st=%+v err=%v", st, err)
 	}
 
 	// The limit survived (never wiped).
-	show, serr := svc.PolicyShow(context.Background())
+	show, serr := svc.PolicyShow(context.Background(), domain.LocalCLI())
 	if serr != nil {
 		t.Fatalf("PolicyShow: %v", serr)
 	}
@@ -155,7 +155,7 @@ func mutateWithAdmin(t *testing.T, dirs rotationDirs, fake *fakebackend.Client, 
 	t.Helper()
 	s2, teardown := reopenRotationService(t, dirs, fake, adminPass, "")
 	defer teardown()
-	_, merr := s2.PolicySet(context.Background(), PolicySetInput{MaxFeeRate: "99"})
+	_, merr := s2.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{MaxFeeRate: "99"})
 	return merr
 }
 
@@ -163,7 +163,7 @@ func mutateWithAdmin(t *testing.T, dirs rotationDirs, fake *fakebackend.Client, 
 // max-tx limit (so a "limits never wiped" assertion has something concrete to check).
 func bootstrapRotationPolicy(t *testing.T, svc *Service) {
 	t.Helper()
-	if _, err := svc.PolicySet(context.Background(), PolicySetInput{
+	if _, err := svc.PolicySet(context.Background(), domain.LocalCLI(), PolicySetInput{
 		MaxTxSat: "500000", AllowlistOn: boolFalse(),
 	}); err != nil {
 		t.Fatalf("bootstrap policy: %v", err)
@@ -180,7 +180,7 @@ func TestPolicyRotationCrashAfterStageRollsBack(t *testing.T) {
 	// Crash right after the staged anchor lands (before reseal). policy.json is still
 	// sealed under OLD ⇒ recovery rolls BACK ⇒ OLD still authenticates.
 	withPolicyRotationFault(t, "after_stage", func() {
-		_, err := svc.PolicyChangeAdminPassphrase(context.Background(), PolicyRotateInput{})
+		_, err := svc.PolicyChangeAdminPassphrase(context.Background(), domain.LocalCLI(), PolicyRotateInput{})
 		if err == nil {
 			t.Fatal("expected the injected fault to abort the rotation")
 		}
@@ -200,7 +200,7 @@ func TestPolicyRotationCrashAfterResealRollsForward(t *testing.T) {
 	// Crash right after the reseal (before promote). policy.json is sealed under NEW ⇒
 	// recovery rolls FORWARD (promote) ⇒ NEW authenticates, OLD does not.
 	withPolicyRotationFault(t, "after_reseal", func() {
-		_, err := svc.PolicyChangeAdminPassphrase(context.Background(), PolicyRotateInput{})
+		_, err := svc.PolicyChangeAdminPassphrase(context.Background(), domain.LocalCLI(), PolicyRotateInput{})
 		if err == nil {
 			t.Fatal("expected the injected fault to abort the rotation")
 		}
@@ -220,7 +220,7 @@ func TestPolicyRotationCrashAfterPromoteConverges(t *testing.T) {
 	// Crash right after the promote anchor lands (the rotation is effectively complete;
 	// the only thing skipped is returning success). Recovery is a no-op (single-key).
 	withPolicyRotationFault(t, "after_promote", func() {
-		_, err := svc.PolicyChangeAdminPassphrase(context.Background(), PolicyRotateInput{})
+		_, err := svc.PolicyChangeAdminPassphrase(context.Background(), domain.LocalCLI(), PolicyRotateInput{})
 		if err == nil {
 			t.Fatal("expected the injected fault to abort after promote")
 		}
@@ -237,7 +237,7 @@ func TestPolicyRotationHappyPathConverges(t *testing.T) {
 	svc, teardown := newRotationService(t, dirs, fake)
 	bootstrapRotationPolicy(t, svc)
 
-	if _, err := svc.PolicyChangeAdminPassphrase(context.Background(), PolicyRotateInput{}); err != nil {
+	if _, err := svc.PolicyChangeAdminPassphrase(context.Background(), domain.LocalCLI(), PolicyRotateInput{}); err != nil {
 		t.Fatalf("rotation: %v", err)
 	}
 	teardown()

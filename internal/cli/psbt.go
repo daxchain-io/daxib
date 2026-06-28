@@ -139,7 +139,7 @@ func newPsbtCreateCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PSBTCreate(cmd.Context(), domain.PSBTCreateRequest{
+			res, err := svc.PSBTCreate(cmd.Context(), domain.LocalCLI(), domain.PSBTCreateRequest{
 				Wallet: wallet, To: to, Amount: amount, FeeRate: feeRate, Speed: speed,
 			})
 			if err != nil {
@@ -192,7 +192,7 @@ func newPsbtSignCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PSBTSign(cmd.Context(),
+			res, err := svc.PSBTSign(cmd.Context(), domain.LocalCLI(),
 				domain.PSBTSignRequest{PSBT: b64, Wallet: wallet, Yes: yes},
 				service.PSBTSignInput{PassphraseStdin: pf.stdin, PassphraseFile: pf.file})
 			if err != nil {
@@ -231,7 +231,7 @@ func newPsbtCombineCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PSBTCombine(cmd.Context(), domain.PSBTCombineRequest{PSBTs: parts})
+			res, err := svc.PSBTCombine(cmd.Context(), domain.LocalCLI(), domain.PSBTCombineRequest{PSBTs: parts})
 			if err != nil {
 				return err
 			}
@@ -259,7 +259,7 @@ func newPsbtFinalizeCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PSBTFinalize(cmd.Context(), domain.PSBTFinalizeRequest{PSBT: b64})
+			res, err := svc.PSBTFinalize(cmd.Context(), domain.LocalCLI(), domain.PSBTFinalizeRequest{PSBT: b64})
 			if err != nil {
 				return err
 			}
@@ -286,7 +286,7 @@ func newPsbtExtractCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PSBTExtract(cmd.Context(), domain.PSBTExtractRequest{PSBT: b64})
+			res, err := svc.PSBTExtract(cmd.Context(), domain.LocalCLI(), domain.PSBTExtractRequest{PSBT: b64})
 			if err != nil {
 				return err
 			}
@@ -328,7 +328,7 @@ func newPsbtBroadcastCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			defer closeFn()
 			m := rs.flags.Mode()
 			sink := render.StderrProgress(cmd.ErrOrStderr(), m.JSON)
-			res, err := svc.PSBTBroadcast(cmd.Context(),
+			res, err := svc.PSBTBroadcast(cmd.Context(), domain.LocalCLI(),
 				domain.PSBTBroadcastRequest{PSBT: b64, Wallet: wallet, Yes: yes}, sink)
 			return renderTxOutcome(cmd, m, res, err)
 		},
@@ -355,7 +355,7 @@ func newPsbtDecodeCmd(ctx context.Context, rs *rootState) *cobra.Command {
 				return err
 			}
 			defer closeFn()
-			res, err := svc.PSBTDecode(cmd.Context(), domain.PSBTDecodeRequest{PSBT: b64, Wallet: wallet})
+			res, err := svc.PSBTDecode(cmd.Context(), domain.LocalCLI(), domain.PSBTDecodeRequest{PSBT: b64, Wallet: wallet})
 			if err != nil {
 				return err
 			}

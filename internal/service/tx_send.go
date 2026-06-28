@@ -28,7 +28,7 @@ var broadcastBackoff = []time.Duration{0, time.Second, 2 * time.Second, 4 * time
 // optional --wait. The deferred settle/abort guard ensures exactly-one-of:
 // terminalize on a permanent reject, leave `signed` on transport exhaustion (the
 // recoverable, idempotent-rebroadcast case).
-func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domain.EventSink) (domain.TxResult, error) {
+func (s *Service) SendTx(ctx context.Context, p domain.Principal, req domain.SendRequest, sink domain.EventSink) (domain.TxResult, error) {
 	// No silent default: a send with no resolved network fails before any address
 	// decode (which is network-specific) or wallet/backend work.
 	if err := s.requireNetwork(); err != nil {
@@ -168,7 +168,7 @@ func (s *Service) SendTx(ctx context.Context, req domain.SendRequest, sink domai
 	// Journal the new tx as `signed` BEFORE broadcast (crash here ⇒ recovery
 	// rebroadcasts the same bytes). The reservation id is cross-linked so orphan
 	// reconciliation can resolve a stranded reservation against this record.
-	rec := s.journalRecord(wallet, art, feeRate)
+	rec := s.journalRecord(p, wallet, art, feeRate)
 	rec.ReservationID = resv.ID()
 	if err := s.journal.Append(ctx, rec); err != nil {
 		// Pre-broadcast failure (no bytes on the wire): release the reservation.

@@ -42,7 +42,7 @@ func TestSendTransportExhaustedLeavesSigned(t *testing.T) {
 	broadcastBackoff = []time.Duration{0, time.Millisecond}
 	defer func() { broadcastBackoff = orig }()
 
-	res, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	if err == nil {
 		t.Fatalf("expected a retryable transport error")
 	}
@@ -71,7 +71,7 @@ func TestSendTransportExhaustedLeavesSigned(t *testing.T) {
 	// second tx (the exact double-spend the reserved-outpoint exclusion prevents).
 	var captured []byte
 	captureBroadcast(fake, &captured)
-	_, err = svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	_, err = svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	if err == nil {
 		t.Fatalf("second send must NOT re-select the in-flight coin; want insufficient funds")
 	}
@@ -109,7 +109,7 @@ func TestSendPermanentRejectMarksFailed(t *testing.T) {
 	svc, teardown := newSendService(t, fake)
 	defer teardown()
 
-	res, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	if err == nil {
 		t.Fatalf("expected a reject error")
 	}
@@ -165,7 +165,7 @@ func TestSendLockSerializesConcurrentSends(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, results[i] = svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+			_, results[i] = svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 		}(i)
 	}
 	wg.Wait()
@@ -202,7 +202,7 @@ func TestDryRunNoJournalNoBroadcast(t *testing.T) {
 	req := sendReq(extRecipient, "0.005")
 	req.DryRun = true
 	req.Yes = false // dry-run is exempt from the confirmation gate
-	res, err := svc.SendTx(context.Background(), req, nil)
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), req, nil)
 	if err != nil {
 		t.Fatalf("dry-run SendTx: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestSendNonTTYNoYesConfirmRequired(t *testing.T) {
 
 	req := sendReq(extRecipient, "0.005")
 	req.Yes = false
-	_, err := svc.SendTx(context.Background(), req, nil)
+	_, err := svc.SendTx(context.Background(), domain.LocalCLI(), req, nil)
 	de := domain.AsError(err)
 	if de == nil || de.Code != domain.CodeUsageConfirmRequired {
 		t.Fatalf("err=%v, want usage.confirmation_required (exit 2)", err)
@@ -249,7 +249,7 @@ func TestSendInsufficientFundsExit5(t *testing.T) {
 	svc, teardown := newSendService(t, fake)
 	defer teardown()
 
-	_, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	_, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	de := domain.AsError(err)
 	if de == nil || de.Exit != domain.ExitInsufficientFunds {
 		t.Fatalf("err=%v, want exit 5", err)
@@ -267,7 +267,7 @@ func TestSendBadAddressExit2(t *testing.T) {
 	defer teardown()
 
 	// A testnet address on mainnet.
-	_, err := svc.SendTx(context.Background(), sendReq("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx", "0.005"), nil)
+	_, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx", "0.005"), nil)
 	de := domain.AsError(err)
 	if de == nil || de.Code != domain.CodeUsageBadAddress {
 		t.Fatalf("err=%v, want usage.bad_address (exit 2)", err)

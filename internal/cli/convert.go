@@ -50,7 +50,7 @@ func newConvertCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			}
 			defer closeFn()
 
-			res, err := svc.Convert(cmd.Context(), domain.ConvertRequest{Amount: args[0], To: to})
+			res, err := svc.Convert(cmd.Context(), domain.LocalCLI(), domain.ConvertRequest{Amount: args[0], To: to})
 			if err != nil {
 				return err
 			}

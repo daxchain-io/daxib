@@ -55,7 +55,7 @@ func newRBFFixture(t *testing.T) *rbfFixture {
 // result (the tx to be replaced).
 func (f *rbfFixture) sendOriginal(t *testing.T, amount string, feeRate string) domain.TxResult {
 	t.Helper()
-	res, err := f.svc.SendTx(context.Background(), domain.SendRequest{
+	res, err := f.svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: amount, FeeRate: feeRate, Yes: true,
 	}, nil)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestSpeedupBuildsValidReplacement_EngineProof(t *testing.T) {
 
 	orig := f.sendOriginal(t, "0.005", "5")
 
-	res, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	res, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err != nil {
@@ -144,7 +144,7 @@ func TestSpeedupBIP125Rules(t *testing.T) {
 		origOutpoints[in.PreviousOutPoint] = true
 	}
 
-	res, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	res, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err != nil {
@@ -193,7 +193,7 @@ func TestCancelRedirectsToSelf_EngineProof(t *testing.T) {
 
 	orig := f.sendOriginal(t, "0.005", "5")
 
-	res, err := f.svc.CancelTx(context.Background(), domain.CancelRequest{
+	res, err := f.svc.CancelTx(context.Background(), domain.LocalCLI(), domain.CancelRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err != nil {
@@ -240,7 +240,7 @@ func TestJournalLinksOriginalToReplacement(t *testing.T) {
 	orig := f.sendOriginal(t, "0.005", "5")
 	origID := orig.JournalID
 
-	res, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	res, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err != nil {
@@ -292,7 +292,7 @@ func TestSpeedupRejectsConfirmedOriginal(t *testing.T) {
 	f.fake.TxStatusFn = func(_ context.Context, txid string) (domain.TxStatus, error) {
 		return domain.TxStatus{Txid: txid, Confirmed: true, Confirmations: 1, BlockHeight: 800001}, nil
 	}
-	_, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	de := domain.AsError(err)
@@ -316,13 +316,13 @@ func TestSpeedupRejectsTerminalOriginal(t *testing.T) {
 	orig := f.sendOriginal(t, "0.005", "5")
 
 	// First speedup succeeds; the original becomes terminal (replaced).
-	if _, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	if _, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil); err != nil {
 		t.Fatalf("first speedup: %v", err)
 	}
 	// A second speedup of the now-replaced ORIGINAL txid must refuse.
-	_, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "40", Yes: true,
 	}, nil)
 	de := domain.AsError(err)
@@ -338,7 +338,7 @@ func TestSpeedupNonTTYNoYesConfirmRequired(t *testing.T) {
 	defer f.teardown()
 
 	orig := f.sendOriginal(t, "0.005", "5")
-	_, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: false,
 	}, nil)
 	de := domain.AsError(err)
@@ -367,7 +367,7 @@ func TestSpeedupAddsInputWhenChangeless(t *testing.T) {
 	defer teardown()
 
 	// Send an amount that leaves sub-dust change at rate 1 ⇒ changeless original.
-	orig, err := svc.SendTx(context.Background(), domain.SendRequest{
+	orig, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "500000sat", FeeRate: "1", Yes: true,
 	}, nil)
 	if err != nil {
@@ -381,7 +381,7 @@ func TestSpeedupAddsInputWhenChangeless(t *testing.T) {
 
 	// Speed it up: the single input cannot cover a higher fee with a recipient that
 	// consumes nearly all of it, so an extra input must be added.
-	res, serr := svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	res, serr := svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "10", Yes: true,
 	}, nil)
 	if serr != nil {
@@ -428,7 +428,7 @@ func TestSpeedupTransportExhaustedLeavesReplacementSignedOriginalUnflipped(t *te
 	f.fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "connection refused")
 	}
-	res, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	res, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err == nil {
@@ -458,7 +458,7 @@ func TestSpeedupRejectedDoesNotStrandOriginal(t *testing.T) {
 	f.fake.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendRPCError, "bad-txns-inputs-missingorspent")
 	}
-	res, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	res, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err == nil {
@@ -488,14 +488,14 @@ func TestDoubleSpeedupChainsReplacements(t *testing.T) {
 
 	orig := f.sendOriginal(t, "0.005", "5")
 
-	repl1, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	repl1, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	if err != nil {
 		t.Fatalf("speedup 1: %v", err)
 	}
 	// Bump again via the REPLACEMENT's txid (it is broadcast + RBF-signaling).
-	repl2, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	repl2, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: repl1.Txid, FeeRate: "50", Yes: true,
 	}, nil)
 	if err != nil {
@@ -521,7 +521,7 @@ func TestDoubleSpeedupChainsReplacements(t *testing.T) {
 func TestSpeedupNonExistentTxidNotFound(t *testing.T) {
 	f := newRBFFixture(t)
 	defer f.teardown()
-	_, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: strings.Repeat("ab", 32), FeeRate: "20", Yes: true,
 	}, nil)
 	de := domain.AsError(err)
@@ -536,7 +536,7 @@ func TestSpeedupRateNotAboveOriginalRejected(t *testing.T) {
 	f := newRBFFixture(t)
 	defer f.teardown()
 	orig := f.sendOriginal(t, "0.005", "10")
-	_, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "10", Yes: true, // equal, not higher
 	}, nil)
 	de := domain.AsError(err)
@@ -569,7 +569,7 @@ func TestSpeedupForeignInputRefusesStateCorrupt(t *testing.T) {
 		t.Fatalf("re-append: %v", err)
 	}
 
-	_, err := f.svc.SpeedupTx(ctx, domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(ctx, domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	de := domain.AsError(err)
@@ -601,7 +601,7 @@ func TestSpeedupTOCTOUReplacedUnderLock(t *testing.T) {
 		t.Fatalf("flip original->replaced: %v", err)
 	}
 
-	_, err := f.svc.SpeedupTx(ctx, domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(ctx, domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	de := domain.AsError(err)
@@ -634,7 +634,7 @@ func TestSpeedupTOCTOUConfirmedUnderLock(t *testing.T) {
 		return domain.TxStatus{Txid: txid, Confirmed: true, Confirmations: 1, BlockHeight: 800001}, nil
 	}
 
-	_, err := f.svc.SpeedupTx(context.Background(), domain.SpeedupRequest{
+	_, err := f.svc.SpeedupTx(context.Background(), domain.LocalCLI(), domain.SpeedupRequest{
 		Wallet: "vec", Txid: orig.Txid, FeeRate: "20", Yes: true,
 	}, nil)
 	de := domain.AsError(err)

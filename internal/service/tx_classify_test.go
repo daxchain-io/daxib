@@ -99,7 +99,7 @@ func TestSendRPCErrorLeavesSignedAndRebroadcasts(t *testing.T) {
 	fake.client.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendRPCError, "Loading block index... (-28)")
 	}
-	res1, err := fake.svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res1, err := fake.svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	if err == nil {
 		t.Fatalf("phase1: expected a recoverable error")
 	}
@@ -116,7 +116,7 @@ func TestSendRPCErrorLeavesSignedAndRebroadcasts(t *testing.T) {
 	}
 	// A second send insufficient (the only coin is reserved) but reconcile flips the
 	// stranded record to broadcast first.
-	_, _ = fake.svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	_, _ = fake.svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	recAfter, _ := fake.svc.journal.ByID(context.Background(), domain.NetworkMainnet, res1.JournalID)
 	if recAfter.Status != journal.StatusBroadcast {
 		t.Fatalf("after reconcile record status=%q, want broadcast", recAfter.Status)
@@ -143,7 +143,7 @@ func TestReconcileTransientRejectLeavesSigned(t *testing.T) {
 	fake.client.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendUnreachable, "connection refused")
 	}
-	res1, _ := fake.svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res1, _ := fake.svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	rec1, _ := fake.svc.journal.ByID(context.Background(), domain.NetworkMainnet, res1.JournalID)
 	if rec1.Status != journal.StatusSigned {
 		t.Fatalf("strand record status=%q, want signed", rec1.Status)
@@ -154,7 +154,7 @@ func TestReconcileTransientRejectLeavesSigned(t *testing.T) {
 	fake.client.BroadcastFn = func(_ context.Context, _ []byte) (string, error) {
 		return "", domain.New(domain.CodeBackendRPCError, "node says: spline reticulation pending")
 	}
-	_, _ = fake.svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	_, _ = fake.svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	recAfter, _ := fake.svc.journal.ByID(context.Background(), domain.NetworkMainnet, res1.JournalID)
 	if recAfter.Status == journal.StatusFailed {
 		t.Fatalf("transient reconcile reject wrongly terminalized the record as failed")

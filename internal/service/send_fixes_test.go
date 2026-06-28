@@ -38,7 +38,7 @@ func TestSendTx_TaprootRecipientFeeNotUnderpaid(t *testing.T) {
 	defer teardown()
 
 	const rate = int64(5)
-	res, err := svc.SendTx(context.Background(), domain.SendRequest{
+	res, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: taprootRecipient, Amount: "0.005", FeeRate: "5", Yes: true,
 	}, nil)
 	if err != nil {
@@ -103,7 +103,7 @@ func TestSendSmallTaprootRejectedAsDust(t *testing.T) {
 	svc, teardown := newSendService(t, fake)
 	defer teardown()
 
-	_, err := svc.SendTx(context.Background(), domain.SendRequest{
+	_, err := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: taprootRecipient, Amount: "300sat", FeeRate: "5", Yes: true,
 	}, nil)
 	if err == nil {
@@ -116,7 +116,7 @@ func TestSendSmallTaprootRejectedAsDust(t *testing.T) {
 
 	// A 294-sat send to a P2WPKH recipient is still accepted (the per-script gate did
 	// not over-reject the smaller-output type).
-	if _, perr := svc.SendTx(context.Background(), domain.SendRequest{
+	if _, perr := svc.SendTx(context.Background(), domain.LocalCLI(), domain.SendRequest{
 		Wallet: "vec", To: extRecipient, Amount: "294sat", FeeRate: "5", Yes: true,
 	}, nil); perr != nil {
 		de := domain.AsError(perr)
@@ -139,7 +139,7 @@ func TestDryRunDoesNotAdvanceChangeWatermark(t *testing.T) {
 	svc, teardown := newSendService(t, fake)
 	defer teardown()
 
-	before, err := svc.WalletShow(context.Background(), domain.WalletShowRequest{Name: "vec"})
+	before, err := svc.WalletShow(context.Background(), domain.LocalCLI(), domain.WalletShowRequest{Name: "vec"})
 	if err != nil {
 		t.Fatalf("WalletShow before: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestDryRunDoesNotAdvanceChangeWatermark(t *testing.T) {
 	req.Yes = false
 	// Run several dry-runs; each must be a no-op on the watermark.
 	for i := 0; i < 5; i++ {
-		res, derr := svc.SendTx(context.Background(), req, nil)
+		res, derr := svc.SendTx(context.Background(), domain.LocalCLI(), req, nil)
 		if derr != nil {
 			t.Fatalf("dry-run %d: %v", i, derr)
 		}
@@ -162,7 +162,7 @@ func TestDryRunDoesNotAdvanceChangeWatermark(t *testing.T) {
 		}
 	}
 
-	after, err := svc.WalletShow(context.Background(), domain.WalletShowRequest{Name: "vec"})
+	after, err := svc.WalletShow(context.Background(), domain.LocalCLI(), domain.WalletShowRequest{Name: "vec"})
 	if err != nil {
 		t.Fatalf("WalletShow after: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestCrashRecoveryDoesNotReselectStrandedInputs(t *testing.T) {
 	broadcastBackoff = []time.Duration{0}
 	defer func() { broadcastBackoff = orig }()
 
-	res1, err := svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	res1, err := svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	if err == nil {
 		t.Fatalf("phase1: expected transport error")
 	}
@@ -219,7 +219,7 @@ func TestCrashRecoveryDoesNotReselectStrandedInputs(t *testing.T) {
 		mu.Unlock()
 		return txidOf(raw), nil
 	}
-	_, err = svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+	_, err = svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	if err == nil {
 		t.Fatalf("phase2: a send re-selected the in-flight coin instead of failing insufficient")
 	}
@@ -288,7 +288,7 @@ func TestConcurrentSendsSpendDistinctOutpoints(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, results[i] = svc.SendTx(context.Background(), sendReq(extRecipient, "0.005"), nil)
+			_, results[i] = svc.SendTx(context.Background(), domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 		}(i)
 	}
 	wg.Wait()
@@ -344,7 +344,7 @@ func TestAcceptedBroadcastRecordWriteFailLeavesSignedNotFailed(t *testing.T) {
 		return txid, nil
 	}
 
-	res, err := svc.SendTx(ctx, sendReq(extRecipient, "0.005"), nil)
+	res, err := svc.SendTx(ctx, domain.LocalCLI(), sendReq(extRecipient, "0.005"), nil)
 	// The send returns a recoverable error (record write failed), NOT a terminal fail.
 	if err == nil {
 		t.Fatalf("expected a recoverable error when the broadcast record write fails")

@@ -21,7 +21,7 @@ import (
 // converts to the OTHER unit (sat→btc, btc→sat) so a bare `convert 0.001btc` is
 // meaningful with no second argument. A bad To unit is usage.convert.bad_unit
 // (exit 2); a malformed amount surfaces the parser's own usage.bad_amount (exit 2).
-func (s *Service) Convert(ctx context.Context, req domain.ConvertRequest) (domain.ConvertResult, error) {
+func (s *Service) Convert(ctx context.Context, p domain.Principal, req domain.ConvertRequest) (domain.ConvertResult, error) {
 	_ = ctx // pure: no provider, no clock — kept for signature symmetry with the other use cases.
 
 	from := domain.SourceUnit(req.Amount)

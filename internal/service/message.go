@@ -32,7 +32,7 @@ type MessageSignInput struct {
 // ref) in req.Ref using BIP-322 "simple". It resolves the ref to an address, then
 // unlocks the address's key under the keystore passphrase and signs. The base64
 // witness is the signature.
-func (s *Service) MessageSign(ctx context.Context, req domain.MessageSignRequest, in MessageSignInput) (domain.MessageSignResult, error) {
+func (s *Service) MessageSign(ctx context.Context, p domain.Principal, req domain.MessageSignRequest, in MessageSignInput) (domain.MessageSignResult, error) {
 	// sign message derives + renders the signing address PER NETWORK (and the bare-
 	// address ref is resolved family-locally for s.net), so it requires a resolved
 	// network. Guard first — before the wallet-scope check and ref resolution — so an
@@ -82,7 +82,7 @@ func (s *Service) MessageSign(ctx context.Context, req domain.MessageSignRequest
 // passphrase-free. A signature that DECODES but does not verify is NOT an error —
 // it returns Valid=false with a nil error (exit 0), so an agent branches on the
 // field. A malformed address or undecodable base64/witness is a usage error.
-func (s *Service) MessageVerify(ctx context.Context, req domain.MessageVerifyRequest) (domain.MessageVerifyResult, error) {
+func (s *Service) MessageVerify(ctx context.Context, p domain.Principal, req domain.MessageVerifyRequest) (domain.MessageVerifyResult, error) {
 	// verify validates the address AND interprets the BIP-322 witness PER NETWORK
 	// (chainParams + bip322.Verify both key off s.net). With no network resolved
 	// chainParams() would silently fall through to MainNetParams — a silent mainnet

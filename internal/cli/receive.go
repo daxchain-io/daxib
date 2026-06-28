@@ -82,7 +82,7 @@ func newReceiveCmd(ctx context.Context, rs *rootState) *cobra.Command {
 			// receive's stream is the PRIMARY output on STDOUT (the address up front,
 			// the terminal line carrying exit) — NOT the StderrProgress sink.
 			sink := render.ReceiveStream(cmd.OutOrStdout(), m.JSON)
-			res, err := svc.Receive(cmd.Context(), req, sink)
+			res, err := svc.Receive(cmd.Context(), domain.LocalCLI(), req, sink)
 			return renderReceiveOutcome(res, err)
 		},
 	}

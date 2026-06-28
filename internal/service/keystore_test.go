@@ -22,7 +22,7 @@ func TestServiceKeystoreChangePassphrase(t *testing.T) {
 		"DAXIB_PASSPHRASE":         "old-pass-12345678",
 		"DAXIB_PASSPHRASE_CONFIRM": "old-pass-12345678",
 	}, msgMnemonic)
-	if _, err := svc1.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc1.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
 	_ = svc1.Close()
@@ -33,7 +33,7 @@ func TestServiceKeystoreChangePassphrase(t *testing.T) {
 		"DAXIB_NEW_PASSPHRASE":         "new-pass-87654321",
 		"DAXIB_NEW_PASSPHRASE_CONFIRM": "new-pass-87654321",
 	}, "")
-	res, err := svc2.KeystoreChangePassphrase(ctx, domain.KeystoreChangePassphraseRequest{}, KeystoreChangePassphraseInput{})
+	res, err := svc2.KeystoreChangePassphrase(ctx, domain.LocalCLI(), domain.KeystoreChangePassphraseRequest{}, KeystoreChangePassphraseInput{})
 	if err != nil {
 		t.Fatalf("KeystoreChangePassphrase: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestServiceKeystoreChangePassphrase(t *testing.T) {
 	// NEW passphrase exports the wallet.
 	svcNew := openServiceAt(t, dir, map[string]string{"DAXIB_PASSPHRASE": "new-pass-87654321"}, "")
 	defer func() { _ = svcNew.Close() }()
-	exp, err := svcNew.WalletExport(ctx, domain.WalletExportRequest{Name: "vec"}, WalletExportInput{})
+	exp, err := svcNew.WalletExport(ctx, domain.LocalCLI(), domain.WalletExportRequest{Name: "vec"}, WalletExportInput{})
 	if err != nil {
 		t.Fatalf("WalletExport under NEW passphrase: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestServiceKeystoreChangePassphrase(t *testing.T) {
 	// OLD passphrase no longer exports.
 	svcOld := openServiceAt(t, dir, map[string]string{"DAXIB_PASSPHRASE": "old-pass-12345678"}, "")
 	defer func() { _ = svcOld.Close() }()
-	if _, oerr := svcOld.WalletExport(ctx, domain.WalletExportRequest{Name: "vec"}, WalletExportInput{}); oerr == nil {
+	if _, oerr := svcOld.WalletExport(ctx, domain.LocalCLI(), domain.WalletExportRequest{Name: "vec"}, WalletExportInput{}); oerr == nil {
 		t.Fatal("OLD passphrase still exports after rotation")
 	}
 }
@@ -72,7 +72,7 @@ func TestServiceKeystoreChangePassphraseConfirmGate(t *testing.T) {
 		"DAXIB_PASSPHRASE":         "old-pass-12345678",
 		"DAXIB_PASSPHRASE_CONFIRM": "old-pass-12345678",
 	}, msgMnemonic)
-	if _, err := svc1.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc1.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
 	_ = svc1.Close()
@@ -83,7 +83,7 @@ func TestServiceKeystoreChangePassphraseConfirmGate(t *testing.T) {
 		"DAXIB_NEW_PASSPHRASE": "new-pass-87654321",
 	}, "")
 	defer func() { _ = svc2.Close() }()
-	_, err := svc2.KeystoreChangePassphrase(ctx, domain.KeystoreChangePassphraseRequest{}, KeystoreChangePassphraseInput{})
+	_, err := svc2.KeystoreChangePassphrase(ctx, domain.LocalCLI(), domain.KeystoreChangePassphraseRequest{}, KeystoreChangePassphraseInput{})
 	if err == nil {
 		t.Fatal("rotation succeeded with no confirmation channel and no TTY")
 	}
@@ -102,7 +102,7 @@ func TestServiceKeystoreChangePassphraseConfirmMismatch(t *testing.T) {
 		"DAXIB_PASSPHRASE":         "old-pass-12345678",
 		"DAXIB_PASSPHRASE_CONFIRM": "old-pass-12345678",
 	}, msgMnemonic)
-	if _, err := svc1.WalletImport(ctx, domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
+	if _, err := svc1.WalletImport(ctx, domain.LocalCLI(), domain.WalletImportRequest{Name: "vec"}, WalletImportInput{MnemonicStdin: true}); err != nil {
 		t.Fatalf("WalletImport: %v", err)
 	}
 	_ = svc1.Close()
@@ -113,7 +113,7 @@ func TestServiceKeystoreChangePassphraseConfirmMismatch(t *testing.T) {
 		"DAXIB_NEW_PASSPHRASE_CONFIRM": "DIFFERENT-87654321",
 	}, "")
 	defer func() { _ = svc2.Close() }()
-	_, err := svc2.KeystoreChangePassphrase(ctx, domain.KeystoreChangePassphraseRequest{}, KeystoreChangePassphraseInput{})
+	_, err := svc2.KeystoreChangePassphrase(ctx, domain.LocalCLI(), domain.KeystoreChangePassphraseRequest{}, KeystoreChangePassphraseInput{})
 	if err == nil {
 		t.Fatal("rotation succeeded with a mismatched confirmation")
 	}
@@ -126,7 +126,7 @@ func TestServiceKeystoreChangePassphraseConfirmMismatch(t *testing.T) {
 func TestServiceKeystoreInfo(t *testing.T) {
 	svc, done := importMsgWallet(t)
 	defer done()
-	info, err := svc.KeystoreInfo(context.Background(), domain.KeystoreInfoRequest{})
+	info, err := svc.KeystoreInfo(context.Background(), domain.LocalCLI(), domain.KeystoreInfoRequest{})
 	if err != nil {
 		t.Fatalf("KeystoreInfo: %v", err)
 	}

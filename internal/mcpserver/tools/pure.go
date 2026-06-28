@@ -15,15 +15,17 @@ import (
 // is one wrapper per shape and register.go picks the right one. The Out is returned
 // as a pointer so the SDK's typed-nil handling marshals a real object.
 
-// readPlainFn is a read/metadata service method with NO EventSink and NO Principal:
-// (ctx, In) → (Out, error). Balance/UTXOList/WalletList/WalletShow/AddressList/Fee/
-// ListTxs all match.
-type readPlainFn[In, Out any] func(context.Context, In) (Out, error)
+// readPlainFn is a read/metadata service method with NO EventSink: (ctx,
+// Principal, In) → (Out, error). Balance/UTXOList/WalletList/WalletShow/
+// AddressList/Fee/ListTxs all match. The Principal is the issue #11 seam; this
+// generic wrapper passes domain.LocalMCP() so every read it covers is attributed
+// to the MCP frontend.
+type readPlainFn[In, Out any] func(context.Context, domain.Principal, In) (Out, error)
 
 func addReadPlain[In, Out any](srv *mcp.Server, name, desc string, fn readPlainFn[In, Out]) {
 	mcp.AddTool(srv, withSchemas[In, Out](readToolDef(name, desc)),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, *Out, error) {
-			out, err := fn(ctx, in)
+			out, err := fn(ctx, domain.LocalMCP(), in)
 			if err != nil {
 				return nil, nil, toolError(err)
 			}
@@ -35,12 +37,12 @@ func addReadPlain[In, Out any](srv *mcp.Server, name, desc string, fn readPlainF
 // the journal record + one backend re-check (it NEVER broadcasts). It is read-class
 // — no EventSink, no dual-signal (a status read of a known/unknown txid is either a
 // TxResult or a plain ref.not_found error).
-type txStatusFn[In any] func(context.Context, In) (domain.TxResult, error)
+type txStatusFn[In any] func(context.Context, domain.Principal, In) (domain.TxResult, error)
 
 func addTxStatus[In any](srv *mcp.Server, name, desc string, fn txStatusFn[In]) {
 	mcp.AddTool(srv, withSchemas[In, domain.TxResult](readToolDef(name, desc)),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, *domain.TxResult, error) {
-			out, err := fn(ctx, in)
+			out, err := fn(ctx, domain.LocalMCP(), in)
 			if err != nil {
 				return nil, nil, toolError(err)
 			}
@@ -53,12 +55,12 @@ func addTxStatus[In any](srv *mcp.Server, name, desc string, fn txStatusFn[In]) 
 // (it may rebroadcast stored bytes, the lost-broadcast window, but never produces a
 // new signature). At the deadline it surfaces tx.wait_timeout, which is dual-signal:
 // the agent reads BOTH the error code AND the TxResult (status + a resume command).
-type txWaitFn[In any] func(context.Context, In, domain.EventSink) (domain.TxResult, error)
+type txWaitFn[In any] func(context.Context, domain.Principal, In, domain.EventSink) (domain.TxResult, error)
 
 func addTxWait[In any](srv *mcp.Server, name, desc string, fn txWaitFn[In]) {
 	mcp.AddTool(srv, withSchemas[In, domain.TxResult](readToolDef(name, desc)),
 		func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, *domain.TxResult, error) {
-			out, err := fn(ctx, in, progressSink(ctx, req))
+			out, err := fn(ctx, domain.LocalMCP(), in, progressSink(ctx, req))
 			if dualSignal(err) {
 				return dualResult(err), &out, nil // BOTH IsError + structured Out (§6.6)
 			}

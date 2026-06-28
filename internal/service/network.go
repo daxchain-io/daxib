@@ -35,7 +35,7 @@ var supportedNetworks = []domain.Network{
 // non-empty net must be one of the five well-known networks (validated by the
 // config store); an empty net CLEARS the persisted default (back to unresolved).
 // Requires a config dir (backend.not_configured otherwise).
-func (s *Service) NetworkUse(ctx context.Context, net string) (domain.NetworkUseResult, error) {
+func (s *Service) NetworkUse(ctx context.Context, p domain.Principal, net string) (domain.NetworkUseResult, error) {
 	store, err := s.requireConfig()
 	if err != nil {
 		return domain.NetworkUseResult{}, err
@@ -53,7 +53,7 @@ func (s *Service) NetworkUse(ctx context.Context, net string) (domain.NetworkUse
 // op would then fail with usage.network_required). It also surfaces the persisted
 // config defaults.network value (if any) so an operator can see the standing
 // default even when a flag/env override is in effect.
-func (s *Service) NetworkShow(_ context.Context) (domain.NetworkShowResult, error) {
+func (s *Service) NetworkShow(_ context.Context, p domain.Principal) (domain.NetworkShowResult, error) {
 	out := domain.NetworkShowResult{
 		Network:  string(s.net),
 		Source:   s.netSource,
@@ -74,7 +74,7 @@ func (s *Service) NetworkShow(_ context.Context) (domain.NetworkShowResult, erro
 
 // NetworkList returns the five well-known networks in canonical order, marking the
 // current active one (if any). Network-independent (read-only introspection).
-func (s *Service) NetworkList(_ context.Context) (domain.NetworkListResult, error) {
+func (s *Service) NetworkList(_ context.Context, p domain.Principal) (domain.NetworkListResult, error) {
 	out := domain.NetworkListResult{Networks: make([]domain.NetworkListEntry, 0, len(supportedNetworks))}
 	for _, n := range supportedNetworks {
 		out.Networks = append(out.Networks, domain.NetworkListEntry{
