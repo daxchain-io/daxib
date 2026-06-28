@@ -6,6 +6,13 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-06-28
+
+A patch release: one operator-visible fix — correct audit-journal attribution for
+agent-initiated transactions — plus the internal Principal seam it rides on. **Fully
+backward-compatible:** no command, `--json` schema, exit code, MCP tool surface, or
+on-disk format changes.
+
 ### Fixed
 
 - **Journal attribution for agent-initiated transactions.** An MCP-initiated send or
