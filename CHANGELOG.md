@@ -6,6 +6,21 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`psbt` — BIP-174 partially-signed Bitcoin transactions** for hardware-wallet /
+  multisig / air-gapped interop, with no change to the custody model. Verbs:
+  `create` (coin-select → unsigned PSBT), `sign`, `combine`, `finalize`, `extract`,
+  `broadcast`, `decode`. **`psbt sign` enforces the sealed spend policy first** — it
+  signs only the wallet's own inputs (matched by script, never a counterparty's
+  derivation hint), re-verifies their values against the backend, runs the per-recipient
+  allow/deny gate, and reserves the wallet's true net outflow (multisig-safe — never a
+  co-signer's value) before a single byte is signed, so PSBT is not a guardrail bypass.
+  New `internal/psbt` provider leaf over `btcd/btcutil/psbt`. MCP exposes
+  `psbt_decode` / `psbt_sign` / `psbt_broadcast` (both signing tools policy-bound);
+  `psbt_create` / `combine` / `finalize` / `extract` are operator-only (kept off the
+  agent surface). Proven end-to-end against a real `bitcoind` regtest node in CI.
+
 ## [1.0.0] - 2026-06-27
 
 First **stable** release. The CLI command surface, the `--json` schemas, the exit
