@@ -6,6 +6,22 @@ adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Journal attribution for agent-initiated transactions.** An MCP-initiated send or
+  PSBT sign was recorded in the audit journal with `source: "cli"` — indistinguishable
+  from a human-run command. The journal now attributes each signed record to the
+  frontend that initiated it (`source: "mcp"` for MCP, `"cli"` for the CLI). On-disk
+  format unchanged; only the value is now correct.
+
+### Internal
+
+- **Principal seam.** Every service method now takes a `domain.Principal` (the caller's
+  identity) immediately after `context.Context`, supplied by the frontend (`LocalCLI` /
+  `LocalMCP`). This is the prerequisite for the planned authenticated HTTP MCP transport
+  (#12), where an `Authenticator` fills the principal from a bearer token. No change to
+  any command, `--json` schema, exit code, or the MCP `tools/list` surface.
+
 ## [1.1.0] - 2026-06-27
 
 The first feature release on the stable v1.0 surface — **additive and
